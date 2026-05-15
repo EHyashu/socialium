@@ -15,10 +15,9 @@ import re
 import uuid as uuid_mod
 from typing import Any
 
-from openai import AsyncOpenAI
-
 from app.config import get_settings
 from app.core.constants import ContentTone, Platform, PLATFORM_LIMITS, AI_MODELS
+from app.core.langfuse_setup import get_openai_client, observe
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -229,6 +228,7 @@ def _postprocess(platform: Platform, body: str, hashtags: list[str], include_emo
 
 # ─── Main generation function ────────────────────────────────────────────────
 
+@observe(name="content-generation")
 async def generate_content(
     platform: Platform,
     tone: ContentTone,
@@ -320,7 +320,7 @@ async def generate_content(
 
     try:
         model = AI_MODELS.get("content_generation", "gpt-4o")
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        client = get_openai_client()
 
         response = await client.chat.completions.create(
             model=model,
@@ -333,6 +333,8 @@ async def generate_content(
             presence_penalty=0.3,
             frequency_penalty=0.3,
             response_format={"type": "json_object"},
+            name=f"content-gen-{platform.value}",
+            metadata={"platform": platform.value, "tone": tone.value},
         )
 
         content = response.choices[0].message.content
@@ -410,6 +412,7 @@ async def _generate_with_groq(
 
 # ─── Enhanced quality scoring ────────────────────────────────────────────────
 
+@observe(name="content-quality-scoring")
 async def score_content_quality(
     body: str,
     platform: Platform,

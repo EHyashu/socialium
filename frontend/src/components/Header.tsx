@@ -6,13 +6,14 @@ import { Plus, Bell, Moon, Sun, ChevronDown, User, Settings, Zap, LogOut } from 
 import { getStoredUser, logout } from "@/lib/auth";
 
 export default function Header() {
-  const user = getStoredUser();
+  const [user, setUser] = useState<ReturnType<typeof getStoredUser>>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Read dark mode from localStorage after hydration
+  // Read user + dark mode from localStorage after hydration to avoid mismatch
   useEffect(() => {
+    setUser(getStoredUser());
     const stored = localStorage.getItem("socialium_dark_mode") === "true";
     setDarkMode(stored);
     if (stored) {

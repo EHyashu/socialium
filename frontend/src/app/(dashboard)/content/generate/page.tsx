@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sparkles,
@@ -18,7 +18,7 @@ import {
   Facebook,
   Calendar,
 } from "lucide-react";
-import { generateContent, createContent } from "@/services/content";
+import { generateContent, createContent, submitForApproval } from "@/services/content";
 import { fetchTrendingKeywords, type TrendKeyword } from "@/services/trends";
 import { getStoredUser } from "@/lib/auth";
 import type { Platform, ContentTone, PlatformResult } from "@/types";
@@ -80,6 +80,7 @@ export default function GenerateContentPage() {
   // Generation state
   const [generating, setGenerating] = useState(false);
   const [generatingPlatform, setGeneratingPlatform] = useState<string>("");
+  const [regeneratingPlatform, setRegeneratingPlatform] = useState<string>("");
   const [results, setResults] = useState<Record<string, PlatformResult> | null>(null);
   const [activeTab, setActiveTab] = useState<string>("");
   const [copiedPlatform, setCopiedPlatform] = useState<string>("");
@@ -166,14 +167,71 @@ export default function GenerateContentPage() {
     }
   };
 
+  // Edit content inline — updates results state
+  const handleEditContent = useCallback((platform: string, newBody: string) => {
+    setResults((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [platform]: { ...prev[platform], body: newBody } };
+    });
+  }, []);
+
   const handleCopy = async (platform: string) => {
     const r = results?.[platform];
     if (!r) return;
     const text = [r.body, r.hashtags?.length ? r.hashtags.map((h) => `#${h}`).join(" ") : ""].filter(Boolean).join("\n\n");
     await navigator.clipboard.writeText(text);
     setCopiedPlatform(platform);
-    toast.success("Copied!");
+    toast.success("Copied to clipboard!");
     setTimeout(() => setCopiedPlatform(""), 2000);
+  };
+
+  // Regenerate a single platform with same settings
+  const handleRegeneratePlatform = async (platform: Platform) => {
+    const source = getSourceContent();
+    if (!source) return;
+
+    setRegeneratingPlatform(platform);
+    try {
+      const allKeywords = [
+        ...keywords.split(",").map((k) => k.trim()).filter(Boolean),
+        ...selectedTrendKeywords,
+      ];
+
+      const data = await generateContent({
+        workspace_id: workspaceId,
+        platforms: [platform],
+        tone,
+        topic: sourceTab === "topic" ? source : undefined,
+        source_text: sourceTab === "paste" ? source : undefined,
+        source_url: sourceTab === "url" ? source : undefined,
+        keywords: allKeywords.length > 0 ? allKeywords : undefined,
+        target_audience: audience || undefined,
+        creativity,
+        content_length: contentLength,
+        include_hashtags: includeHashtags,
+        include_emojis: includeEmojis,
+        generate_variants: generateVariants,
+        trend_boost: trendBoost,
+        trend_industry: trendBoost ? trendIndustry : undefined,
+        trend_keywords: selectedTrendKeywords.length > 0 ? selectedTrendKeywords : undefined,
+      });
+
+      // Merge single platform result into existing results
+      setResults((prev) => {
+        if (!prev) return data.results;
+        const merged = { ...prev };
+        if (data.results[platform]) merged[platform] = data.results[platform];
+        if (data.results[`${platform}_variant`]) merged[`${platform}_variant`] = data.results[`${platform}_variant`];
+        return merged;
+      });
+      toast.success(`${PLATFORMS.find((p) => p.value === platform)?.label} regenerated!`);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : "Regeneration failed";
+      toast.error(msg);
+    } finally {
+      setRegeneratingPlatform("");
+    }
   };
 
   const handleSaveAll = async () => {
@@ -194,6 +252,42 @@ export default function GenerateContentPage() {
       router.push("/content");
     } catch {
       toast.error("Failed to save");
+    }
+  };
+
+  const handleApproveAndSchedule = async () => {
+    if (!results) return;
+    try {
+      const savedIds: string[] = [];
+      for (const [platform, r] of Object.entries(results)) {
+        if (!r.success || platform.includes("_variant")) continue;
+        const saved = await createContent({
+          workspace_id: workspaceId,
+          platform: platform as Platform,
+          tone,
+          title: topic.trim().slice(0, 80) || "AI Generated",
+          body: r.body,
+          hashtags: r.hashtags,
+        });
+        savedIds.push(saved.id);
+      }
+
+      // Submit each saved draft for WhatsApp approval
+      let whatsappSent = false;
+      for (const id of savedIds) {
+        const approvalResult = await submitForApproval(id);
+        if (approvalResult.whatsapp_sent) whatsappSent = true;
+      }
+
+      if (whatsappSent) {
+        toast.success("Sent for approval on WhatsApp! Check your phone.");
+      } else {
+        toast.success("Saved as pending approval. Add your WhatsApp number in settings to get notifications.");
+      }
+
+      router.push("/content");
+    } catch {
+      toast.error("Failed to submit for approval");
     }
   };
 
@@ -582,6 +676,9 @@ export default function GenerateContentPage() {
                   onCopy={() => handleCopy(activeTab)}
                   copied={copiedPlatform === activeTab}
                   charLimit={PLATFORMS.find((x) => x.value === activeTab)?.charLimit || 3000}
+                  onEdit={(newBody) => handleEditContent(activeTab, newBody)}
+                  onRegenerate={() => handleRegeneratePlatform(activeTab as Platform)}
+                  isRegenerating={regeneratingPlatform === activeTab}
                 />
               )}
 
@@ -595,11 +692,11 @@ export default function GenerateContentPage() {
                   Save All as Drafts
                 </button>
                 <button
-                  onClick={() => { handleSaveAll(); }}
+                  onClick={handleApproveAndSchedule}
                   className="flex-1 rounded-xl bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <Calendar className="h-4 w-4" />
-                  Approve All & Schedule
+                  Approve & Send to WhatsApp
                 </button>
               </div>
             </div>
@@ -619,6 +716,9 @@ function PlatformOutput({
   onCopy,
   copied,
   charLimit,
+  onEdit,
+  onRegenerate,
+  isRegenerating,
 }: {
   platform: string;
   result: PlatformResult;
@@ -626,10 +726,14 @@ function PlatformOutput({
   onCopy: () => void;
   copied: boolean;
   charLimit: number;
+  onEdit: (newBody: string) => void;
+  onRegenerate: () => void;
+  isRegenerating: boolean;
 }) {
   const [showVariant, setShowVariant] = useState(false);
   const active = showVariant && variant ? variant : result;
   const charCount = (active.body || "").length;
+  const isOverLimit = charCount > charLimit;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
@@ -638,7 +742,7 @@ function PlatformOutput({
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-gray-900 capitalize">{platform}</span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            charCount <= charLimit ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            isOverLimit ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
           }`}>
             {charCount.toLocaleString()} / {charLimit.toLocaleString()}
           </span>
@@ -658,9 +762,23 @@ function PlatformOutput({
         )}
       </div>
 
-      {/* Content */}
-      <div className="rounded-lg bg-gray-50 p-4">
-        <p className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">{active.body}</p>
+      {/* Editable content textarea */}
+      <div className="relative">
+        <textarea
+          value={active.body || ""}
+          onChange={(e) => onEdit(e.target.value)}
+          rows={Math.max(4, (active.body || "").split("\n").length + 1)}
+          className={`w-full rounded-lg border px-4 py-3 text-sm text-gray-800 leading-relaxed resize-y focus:outline-none focus:ring-1 ${
+            isOverLimit
+              ? "border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500"
+              : "border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500"
+          }`}
+        />
+        {isOverLimit && (
+          <p className="absolute -bottom-5 right-0 text-[10px] text-red-600 font-medium">
+            {charCount - charLimit} characters over limit
+          </p>
+        )}
       </div>
 
       {/* Hashtags */}
@@ -683,6 +801,14 @@ function PlatformOutput({
           {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
           {copied ? "Copied" : "Copy"}
         </button>
+        <button
+          onClick={onRegenerate}
+          disabled={isRegenerating}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isRegenerating ? "animate-spin" : ""}`} />
+          {isRegenerating ? "Regenerating..." : "Regenerate"}
+        </button>
         {variant && (
           <button
             onClick={() => setShowVariant(!showVariant)}
@@ -704,8 +830,9 @@ function PlatformOutput({
   );
 }
 
-function PlatformPreview({ platform, body, hashtags }: { platform: string; body: string; hashtags?: string[] }) {
-  const previewText = body.length > 150 ? body.slice(0, 150) + "..." : body;
+function PlatformPreview({ platform, body, hashtags }: { platform: string; body?: string; hashtags?: string[] }) {
+  const safeBody = body || "";
+  const previewText = safeBody.length > 150 ? safeBody.slice(0, 150) + "..." : safeBody;
 
   return (
     <div className="rounded-lg border border-gray-100 bg-gray-50 p-4 mt-2">

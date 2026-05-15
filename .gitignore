@@ -8,3 +8,10 @@ coverage
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.sqlite
+spec/
+.cursor/

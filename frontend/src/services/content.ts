@@ -38,6 +38,11 @@ export async function approveContent(contentId: string, action: string, comment?
   return res.data;
 }
 
+export async function submitForApproval(contentId: string): Promise<{ status: string; whatsapp_sent: boolean; content_id?: string; reason?: string }> {
+  const res = await api.post(`/content/${contentId}/submit-for-approval`);
+  return res.data;
+}
+
 export async function scoreContent(contentId: string) {
   const res = await api.post(`/content/${contentId}/score`);
   return res.data;

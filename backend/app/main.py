@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.langfuse_setup import langfuse_health_check, langfuse_flush
 from app.core.qdrant_client import create_all_collections
 from app.routers import (
     ab_testing,
@@ -57,39 +58,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         print(f"Warning: Scheduler failed to start: {e}")
 
     # ── Langfuse health check (non-fatal) ──
-    if settings.langfuse_public_key and settings.langfuse_secret_key:
-        try:
-            from langfuse import Langfuse
-            lf = Langfuse(
-                public_key=settings.langfuse_public_key,
-                secret_key=settings.langfuse_secret_key,
-                host=settings.langfuse_base_url,
-            )
-            if lf.auth_check():
-                print(f"Langfuse connected: {settings.langfuse_base_url}")
-            else:
-                print(
-                    "WARNING: Langfuse auth check returned False — "
-                    "LLM observability will be silently disabled. "
-                    "Verify your LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY."
-                )
-        except ImportError:
-            print(
-                "WARNING: Langfuse package not installed. "
-                "Install with: pip install langfuse"
-            )
-        except Exception as e:
-            print(f"WARNING: Langfuse health check failed (non-fatal): {e}")
-    elif settings.app_env == "development":
-        print(
-            "Langfuse not configured. Set LANGFUSE_PUBLIC_KEY and "
-            "LANGFUSE_SECRET_KEY to enable LLM observability."
-        )
+    langfuse_health_check()
 
     yield
 
     # ── Shutdown ──
     print(f"Shutting down {settings.app_name}...")
+    langfuse_flush()
     try:
         from celery_config import stop_scheduler
         stop_scheduler()

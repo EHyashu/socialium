@@ -21,7 +21,7 @@ def _get_posthog() -> Posthog | None:
     global _posthog
     if _posthog is None and settings.posthog_api_key:
         _posthog = Posthog(
-            api_key=settings.posthog_project_id or settings.posthog_api_key,
+            project_api_key=settings.posthog_project_id or settings.posthog_api_key,
             host=settings.posthog_host,
         )
     return _posthog
