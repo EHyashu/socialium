@@ -1,17 +1,83 @@
+# Dependencies
 node_modules
+vendor/
+
+# Build outputs
 .next
-.env
-.env.*
+out/
 dist
 build
-coverage
-*.log
+
+# Environment variables (CRITICAL - Never commit secrets)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+!.env.example
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# TypeScript
 tsconfig.tsbuildinfo
+
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+*.egg
+
+# Database files (may contain sensitive data)
 *.db
 *.sqlite
-spec/
+*.sqlite3
+
+# Cursor IDE
 .cursor/
+.qoder/
+
+# Docker (optional - uncomment if you don't want to track Docker files)
+# .dockerignore
+# docker-compose.yml
+# Dockerfile
+
+# Secrets and credentials (EXPLICIT DENY)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Backup files
+*.old
+*.bak
+*.tmp
+*.temp

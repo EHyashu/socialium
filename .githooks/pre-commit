@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# Pre-commit hook to prevent committing secrets
+# Install: cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+echo "🔍 Running security check for exposed secrets..."
+
+# Define patterns that might indicate secrets
+SECRET_PATTERNS=(
+    # API Keys
+    'sk-[a-zA-Z0-9]{20,}'
+    'sk-proj-[a-zA-Z0-9]{20,}'
+    'sk-ant-[a-zA-Z0-9]{20,}'
+    'gsk_[a-zA-Z0-9]{20,}'
+    
+    # OAuth Secrets
+    'WPL_AP1\.[a-zA-Z0-9]'
+    
+    # Twilio
+    'AC[a-f0-9]{32}'
+    'twilio.*[a-f0-9]{32}'
+    
+    # Generic secrets (long alphanumeric strings after =)
+    '(SECRET|PASSWORD|TOKEN|API_KEY|SID)\s*=\s*[A-Za-z0-9+/]{20,}={0,2}'
+)
+
+# Files to skip (venv, node_modules, etc.)
+SKIP_DIRS="venv|node_modules|.git|__pycache__|.next"
+
+# Check staged files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -vE "$SKIP_DIRS")
+
+if [ -z "$STAGED_FILES" ]; then
+    echo "✅ No files to check"
+    exit 0
+fi
+
+FOUND_SECRET=false
+
+for pattern in "${SECRET_PATTERNS[@]}"; do
+    MATCHES=$(echo "$STAGED_FILES" | xargs grep -lE "$pattern" 2>/dev/null || true)
+    if [ -n "$MATCHES" ]; then
+        echo "❌ POTENTIAL SECRET FOUND!"
+        echo "   Pattern: $pattern"
+        echo "   Files: $MATCHES"
+        FOUND_SECRET=true
+    fi
+done
+
+# Check for .env files
+ENV_FILES=$(echo "$STAGED_FILES" | grep -E "^\.env" | grep -v "\.env\.example" || true)
+if [ -n "$ENV_FILES" ]; then
+    echo "❌ ENVIRONMENT FILE DETECTED!"
+    echo "   Files: $ENV_FILES"
+    echo "   ⚠️  Never commit .env files with real credentials!"
+    FOUND_SECRET=true
+fi
+
+if [ "$FOUND_SECRET" = true ]; then
+    echo ""
+    echo "🛑 Commit blocked due to potential secrets!"
+    echo ""
+    echo "What to do:"
+    echo "1. Review the files listed above"
+    echo "2. Remove or replace secrets with placeholders"
+    echo "3. Use .env.local for your actual credentials"
+    echo "4. Run: git add <files> to re-stage"
+    echo ""
+    echo "If this is a false positive, you can bypass with:"
+    echo "  git commit --no-verify (NOT RECOMMENDED)"
+    exit 1
+fi
+
+echo "✅ Security check passed - no secrets detected"
+exit 0
