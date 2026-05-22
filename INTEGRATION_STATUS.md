@@ -83,8 +83,8 @@ TWILIO_WHATSAPP_NUMBER=+14155238886
 **⚠️ OAUTH PROVIDERS (Need Configuration):**
 ```bash
 # LinkedIn - ✅ Configured
-LINKEDIN_CLIENT_ID=86bm41kk0ocuqi ✅
-LINKEDIN_CLIENT_SECRET=WPL_AP1.lddaMe... ✅
+LINKEDIN_CLIENT_ID=your_linkedin_client_id ✅
+LINKEDIN_CLIENT_SECRET=your_linkedin_client_secret ✅
 LINKEDIN_REDIRECT_URI=http://localhost:3000/platforms ✅
 
 # Twitter/X - ❌ Not configured

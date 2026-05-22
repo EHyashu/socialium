@@ -59,8 +59,8 @@
    - Check backend logs for error
    - Verify LinkedIn OAuth credentials in `.env`:
      ```
-     LINKEDIN_CLIENT_ID=86bm41kk0ocuqi
-     LINKEDIN_CLIENT_SECRET=WPL_AP1.lddaMe0y13YLawa1.SihHhQ==
+     LINKEDIN_CLIENT_ID=your_linkedin_client_id
+     LINKEDIN_CLIENT_SECRET=your_linkedin_client_secret
      LINKEDIN_REDIRECT_URI=http://localhost:3000/platforms
      ```
    - Check LinkedIn app settings at https://www.linkedin.com/developers/
