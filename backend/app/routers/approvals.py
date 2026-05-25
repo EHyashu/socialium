@@ -12,6 +12,7 @@ from app.models.approval import Approval
 from app.models.content import Content
 from app.models.user import User
 from app.core.constants import ApprovalAction, ContentStatus
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ async def create_approval(
     action: str,
     comment: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Submit an approval decision on content."""
     content = await db.get(Content, content_id)
@@ -78,7 +80,7 @@ async def create_approval(
 
     approval = Approval(
         content_id=content_id,
-        reviewer_id=uuid.uuid4(),  # TODO: get from auth
+        reviewer_id=current_user.id,
         action=approval_action,
         comment=comment,
     )

@@ -30,7 +30,7 @@ export default function NewAnalyticsPage() {
     if (!workspaceId || !mounted) return;
     
     setLoading(true);
-    getAnalyticsOverview(workspaceId)
+    getAnalyticsOverview(workspaceId, days)
       .then((data) => setAnalytics(data))
       .catch((err) => {
         console.error("Failed to load analytics:", err);
@@ -79,8 +79,8 @@ export default function NewAnalyticsPage() {
       icon: "post_add",
       label: "Total Posts",
       value: analytics?.summary?.total_posts || 0,
-      change: "+12%",
-      trend: "up",
+      change: null,  // Remove hardcoded percentage
+      trend: null,
       color: "text-primary",
     },
     {
@@ -89,24 +89,24 @@ export default function NewAnalyticsPage() {
       value: (analytics?.summary?.total_likes || 0) + 
              (analytics?.summary?.total_comments || 0) + 
              (analytics?.summary?.total_shares || 0),
-      change: "+8%",
-      trend: "up",
+      change: null,  // Remove hardcoded percentage
+      trend: null,
       color: "text-secondary",
     },
     {
       icon: "visibility",
       label: "Impressions",
       value: analytics?.summary?.total_impressions || 0,
-      change: "+15%",
-      trend: "up",
+      change: null,  // Remove hardcoded percentage
+      trend: null,
       color: "text-tertiary",
     },
     {
       icon: "trending_up",
       label: "Avg Engagement Rate",
       value: `${analytics?.summary?.average_engagement_rate || 0}%`,
-      change: "+2.1%",
-      trend: "up",
+      change: null,  // Remove hardcoded percentage
+      trend: null,
       color: "text-primary",
     },
   ];
@@ -149,6 +149,14 @@ export default function NewAnalyticsPage() {
             >
               90D
             </button>
+            <button
+              onClick={() => setDays(365)}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                days === 365 ? "bg-surface-container-highest text-primary shadow-sm" : "hover:text-on-surface"
+              }`}
+            >
+              1Y
+            </button>
           </div>
         </div>
       </section>
@@ -189,14 +197,16 @@ export default function NewAnalyticsPage() {
               >
                 <div className="flex items-center justify-between mb-4">
                   <span className={`material-symbols-outlined ${stat.color} text-[28px]`}>{stat.icon}</span>
-                  <span className={`text-sm font-medium flex items-center gap-1 ${
-                    stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {stat.change}
-                    <span className="material-symbols-outlined text-[16px]">
-                      {stat.trend === 'up' ? 'arrow_upward' : 'arrow_downward'}
+                  {stat.change && stat.trend && (
+                    <span className={`text-sm font-medium flex items-center gap-1 ${
+                      stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {stat.change}
+                      <span className="material-symbols-outlined text-[16px]">
+                        {stat.trend === 'up' ? 'arrow_upward' : 'arrow_downward'}
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </div>
                 <p className="text-3xl font-bold text-on-surface">{stat.value}</p>
                 <p className="text-sm text-on-surface-variant mt-1">{stat.label}</p>

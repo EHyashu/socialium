@@ -1,24 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Sparkles, Trash2, Eye, Send, Zap } from "lucide-react";
+import { Sparkles, Trash2, Eye, Send, Zap, Calendar, Clock } from "lucide-react";
 import { listContent, deleteContent, submitForApproval } from "@/services/content";
 import { requireWorkspaceId } from "@/lib/workspace";
 import type { Content } from "@/types";
 import { formatDate, capitalize } from "@/lib/utils";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
+import Link from "next/link";
 
 export default function ContentPage() {
   const workspaceId = requireWorkspaceId();
   const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [publishing, setPublishing] = useState<string | null>(null);
 
   const load = async () => {
+    setLoading(true);
     try {
-      const data = await listContent(workspaceId, statusFilter || undefined);
+      // Pass status filter to API (convert "all" to undefined)
+      const statusParam = statusFilter === "all" ? undefined : statusFilter;
+      const data = await listContent(workspaceId, statusParam);
       setContents(data);
     } catch {
       toast.error("Failed to load content");
@@ -29,7 +33,7 @@ export default function ContentPage() {
 
   useEffect(() => {
     load();
-  }, [statusFilter]);
+  }, [statusFilter, workspaceId]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this content?")) return;
@@ -65,16 +69,16 @@ export default function ContentPage() {
   };
 
   const handlePublishNow = async (id: string) => {
-    if (!confirm("Publish this post to LinkedIn right now?")) return;
+    if (!confirm("Publish this post right now?")) return;
     
     setPublishing(id);
     try {
       const response = await api.post(`/content/${id}/publish-now`);
       
       if (response.data.success) {
-        toast.success("✅ Published to LinkedIn!");
+        toast.success("✅ Published successfully!");
         
-        // Open the LinkedIn post in new tab
+        // Open the platform post in new tab if URL provided
         if (response.data.platform_url) {
           window.open(response.data.platform_url, "_blank");
         }
@@ -96,47 +100,87 @@ export default function ContentPage() {
     }
   };
 
-  const statusColors: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-    pending_approval: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-    approved: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    scheduled: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    published: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    rejected: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-    failed: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  const getStatusColor = (status: string): string => {
+    const colors: Record<string, string> = {
+      draft: "bg-gray-500/20 text-gray-400",
+      pending_approval: "bg-amber-500/20 text-amber-400",
+      approved: "bg-blue-500/20 text-blue-400",
+      scheduled: "bg-indigo-500/20 text-indigo-400",
+      published: "bg-green-500/20 text-green-400",
+      rejected: "bg-red-500/20 text-red-400",
+      failed: "bg-red-500/20 text-red-400",
+    };
+    return colors[status] || "bg-gray-500/20 text-gray-400";
   };
 
+  const getPlatformIcon = (platform: string): string => {
+    const icons: Record<string, string> = {
+      linkedin: "business_center",
+      twitter: "tag",
+      instagram: "photo_camera",
+      facebook: "group",
+      whatsapp: "chat",
+    };
+    return icons[platform?.toLowerCase()] || "article";
+  };
+
+  const formatScheduledTime = (scheduledAt: string | null): { day: string; time: string } | null => {
+    if (!scheduledAt) return null;
+    
+    const date = new Date(scheduledAt);
+    const day = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    
+    return { day, time };
+  };
+
+  const filters = [
+    { value: "all", label: "All" },
+    { value: "draft", label: "Draft" },
+    { value: "pending_approval", label: "Pending approval" },
+    { value: "scheduled", label: "Scheduled" },
+    { value: "published", label: "Published" },
+  ];
+
   return (
-    <div className="space-y-4 lg:space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="min-h-screen pb-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-xl lg:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Content</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>Manage and create your social media posts</p>
+          <h1 className="text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Content</h1>
+          <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
+            Manage and create your social media posts
+          </p>
         </div>
-        <div className="flex gap-2">
-          <a
-            href="/content/generate"
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
-          >
-            <Sparkles className="h-4 w-4" />
-            AI Generate
-          </a>
-        </div>
+        <Link
+          href="/content/generate"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+        >
+          <Sparkles className="h-4 w-4" />
+          AI Generate
+        </Link>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        {["", "draft", "pending_approval", "scheduled", "published"].map((s) => (
+      <div className="flex flex-wrap gap-2 mb-6">
+        {filters.map((filter) => (
           <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              statusFilter === s
-                ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-white/10 dark:text-white/60 dark:hover:bg-white/20"
+            key={filter.value}
+            onClick={() => setStatusFilter(filter.value)}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              statusFilter === filter.value
+                ? "bg-indigo-600 text-white shadow-lg"
+                : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
             }`}
           >
-            {s === "" ? "All" : capitalize(s.replace("_", " "))}
+            {filter.label}
+            {filter.value !== "all" && (
+              <span className="ml-2 text-xs opacity-75">
+                {filter.value === "all" 
+                  ? contents.length 
+                  : contents.filter(c => c.status === filter.value).length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -144,87 +188,139 @@ export default function ContentPage() {
       {/* Content Table */}
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600" />
+          <span className="material-symbols-outlined text-4xl animate-spin" style={{ color: "#6366f1" }}>progress_activity</span>
         </div>
       ) : contents.length === 0 ? (
-        <div className="rounded-xl border py-16 text-center" style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}>
-          <p style={{ color: "var(--text-muted)" }}>No content found.</p>
+        <div className="glass-card rounded-xl py-16 text-center">
+          <span className="material-symbols-outlined text-6xl mb-4" style={{ color: "var(--text-secondary)", opacity: 0.3 }}>article</span>
+          <p className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>No content found</p>
+          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+            {statusFilter !== "all" 
+              ? `No ${statusFilter.replace("_", " ")} content. Try a different filter.` 
+              : "Create your first post to get started!"}
+          </p>
+          <Link
+            href="/content/generate"
+            className="mt-4 inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+          >
+            <Sparkles className="h-4 w-4" />
+            Create Content
+          </Link>
         </div>
       ) : (
-        <div className="rounded-xl border overflow-hidden" style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}>
+        <div className="glass-card rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b" style={{ borderColor: "var(--border-color)", background: "var(--bg-hover)" }}>
-                <tr>
-                  <th className="px-4 lg:px-5 py-3 font-medium" style={{ color: "var(--text-secondary)" }}>Title</th>
-                  <th className="px-4 lg:px-5 py-3 font-medium" style={{ color: "var(--text-secondary)" }}>Platform</th>
-                  <th className="px-4 lg:px-5 py-3 font-medium" style={{ color: "var(--text-secondary)" }}>Status</th>
-                  <th className="hidden md:table-cell px-4 lg:px-5 py-3 font-medium" style={{ color: "var(--text-secondary)" }}>Created</th>
-                  <th className="px-4 lg:px-5 py-3 font-medium" style={{ color: "var(--text-secondary)" }}>Actions</th>
+              <thead style={{ background: "var(--bg-hover)" }}>
+                <tr className="border-b" style={{ borderColor: "var(--border-color)" }}>
+                  <th className="px-5 py-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Title</th>
+                  <th className="px-5 py-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Platform</th>
+                  <th className="px-5 py-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Status</th>
+                  <th className="hidden lg:table-cell px-5 py-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Scheduled</th>
+                  <th className="hidden md:table-cell px-5 py-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Created</th>
+                  <th className="px-5 py-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border-color)]">
-                {contents.map((item) => (
-                  <tr key={item.id} className="hover:bg-white/5 dark:hover:bg-white/5 light:hover:bg-black/5">
-                    <td className="px-4 lg:px-5 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
-                      {item.title || "Untitled"}
-                    </td>
-                    <td className="px-4 lg:px-5 py-3" style={{ color: "var(--text-secondary)" }}>
-                      {item.platform ? capitalize(item.platform) : "—"}
-                    </td>
-                    <td className="px-4 lg:px-5 py-3">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[item.status] || ""}`}>
-                        {capitalize(item.status.replace("_", " "))}
-                      </span>
-                    </td>
-                    <td className="hidden md:table-cell px-4 lg:px-5 py-3" style={{ color: "var(--text-muted)" }}>{formatDate(item.created_at)}</td>
-                    <td className="px-4 lg:px-5 py-3">
-                      <div className="flex gap-2">
-                        <a
-                          href={`/content/${item.id}`}
-                          className="rounded p-1 hover:bg-white/10 transition-colors"
-                          style={{ color: "var(--text-secondary)" }}
-                          title="View details"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </a>
-                        {(item.status === "approved" || item.status === "scheduled") && (
-                          <button
-                            onClick={() => handlePublishNow(item.id)}
-                            disabled={publishing === item.id}
-                            className="rounded p-1 hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors disabled:opacity-50"
-                            style={{ color: "var(--text-secondary)" }}
-                            title="Publish now to LinkedIn"
-                          >
-                            {publishing === item.id ? (
-                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                            ) : (
-                              <Zap className="h-4 w-4" />
-                            )}
-                          </button>
+              <tbody className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+                {contents.map((item) => {
+                  const scheduledTime = formatScheduledTime(item.scheduled_at);
+                  
+                  return (
+                    <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-5 py-4">
+                        <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                          {item.title || "Untitled"}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-lg" style={{ color: "var(--text-secondary)" }}>
+                            {getPlatformIcon(item.platform || "")}
+                          </span>
+                          <span className="capitalize" style={{ color: "var(--text-secondary)" }}>
+                            {item.platform || "—"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${getStatusColor(item.status)}`}>
+                          {capitalize(item.status.replace("_", " "))}
+                        </span>
+                      </td>
+                      <td className="hidden lg:table-cell px-5 py-4">
+                        {item.status === "scheduled" && scheduledTime ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5" style={{ color: "var(--text-primary)" }}>
+                              <Calendar className="h-3.5 w-3.5" />
+                              <span className="text-xs font-medium">{scheduledTime.day}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5" style={{ color: "var(--text-secondary)" }}>
+                              <Clock className="h-3.5 w-3.5" />
+                              <span className="text-xs">{scheduledTime.time}</span>
+                            </div>
+                          </div>
+                        ) : item.status === "published" && item.published_at ? (
+                          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {formatDate(item.published_at)}
+                          </span>
+                        ) : (
+                          <span className="text-xs" style={{ color: "var(--text-secondary)", opacity: 0.5 }}>—</span>
                         )}
-                        {item.status === "draft" && (
-                          <button
-                            onClick={() => handleSubmitForApproval(item.id)}
-                            className="rounded p-1 hover:bg-brand-500/10 hover:text-brand-500 transition-colors"
+                      </td>
+                      <td className="hidden md:table-cell px-5 py-4" style={{ color: "var(--text-secondary)" }}>
+                        {formatDate(item.created_at)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/content/${item.id}`}
+                            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
                             style={{ color: "var(--text-secondary)" }}
-                            title="Submit for approval"
+                            title="View details"
                           >
-                            <Send className="h-4 w-4" />
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                          
+                          {(item.status === "approved" || item.status === "scheduled") && (
+                            <button
+                              onClick={() => handlePublishNow(item.id)}
+                              disabled={publishing === item.id}
+                              className="p-2 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors disabled:opacity-50"
+                              style={{ color: "var(--text-secondary)" }}
+                              title="Publish now"
+                            >
+                              {publishing === item.id ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              ) : (
+                                <Zap className="h-4 w-4" />
+                              )}
+                            </button>
+                          )}
+                          
+                          {item.status === "draft" && (
+                            <button
+                              onClick={() => handleSubmitForApproval(item.id)}
+                              className="p-2 rounded-lg hover:bg-indigo-500/10 hover:text-indigo-400 transition-colors"
+                              style={{ color: "var(--text-secondary)" }}
+                              title="Submit for approval"
+                            >
+                              <Send className="h-4 w-4" />
+                            </button>
+                          )}
+                          
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-2 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                            style={{ color: "var(--text-secondary)" }}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded p-1 hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                          style={{ color: "var(--text-secondary)" }}
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

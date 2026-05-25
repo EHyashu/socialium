@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { Plug, ExternalLink, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { listPlatformAccounts, disconnectPlatform, getOAuthUrl, handleOAuthCallback } from "@/services/platforms";
+import { getStoredUser } from "@/lib/auth";
 import type { PlatformAccount, Platform } from "@/types";
 import { capitalize, formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -68,10 +69,17 @@ function PlatformsContent() {
 
   const handleConnect = async (platform: Platform) => {
     try {
-      const url = await getOAuthUrl(platform);
+      const user = getStoredUser();
+      if (!user?.id) {
+        toast.error("User not authenticated");
+        return;
+      }
+      const url = await getOAuthUrl(platform, user.id);
       window.location.href = url;
-    } catch {
-      toast.error(`Failed to start ${platform} connection`);
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.detail || `Failed to start ${platform} connection`;
+      toast.error(errorMsg);
+      console.error(`OAuth start error:`, err);
     }
   };
 

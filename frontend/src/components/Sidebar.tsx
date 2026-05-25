@@ -35,6 +35,19 @@ const NAV_ITEMS = [
         path: "/analytics",
         color: "text-emerald-400",
       },
+      {
+        icon: "📅",
+        label: "Calendar",
+        path: "/calendar",
+        color: "text-purple-400",
+      },
+      {
+        icon: "🧪",
+        label: "A/B Testing",
+        path: "/ab-testing",
+        color: "text-teal-400",
+        isNew: true,
+      },
     ],
   },
   {

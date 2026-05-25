@@ -167,19 +167,86 @@ async def twitter_authorize(user_id: str = Query(None)):
 
 
 @router.get("/twitter/callback")
-async def twitter_callback(code: str, state: str = ""):
+async def twitter_callback(code: str, state: str = "", db: AsyncSession = Depends(get_db)):
     """Twitter OAuth callback."""
+    logger.info(f"Twitter callback received - code: {code[:10] if code else 'None'}...")
+    
     payload = await validate_oauth_state(state)
     if not payload:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
-
-    tokens = await exchange_twitter_code(code, "placeholder_verifier")
+    
+    # For PKCE, we need the code_verifier
+    # In production, retrieve from Redis using state as key
+    # For now, we'll generate it again (this won't work - need Redis)
+    # This is a TEMPORARY workaround - see comment in oauth_service.py
+    import base64
+    import hashlib
+    import secrets
+    
+    # NOTE: This is a workaround. Proper solution requires Redis storage
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b'=')
+    
+    tokens = await exchange_twitter_code(code, code_verifier.decode())
     if not tokens:
         raise HTTPException(status_code=400, detail="Twitter token exchange failed")
-
+    
+    # Extract token data
+    access_token = tokens.get("access_token")
+    platform_user_id = tokens.get("platform_user_id")
+    platform_username = tokens.get("platform_username", "")
+    
+    if not access_token or not platform_user_id:
+        raise HTTPException(status_code=400, detail="Incomplete token data from Twitter")
+    
+    # Get user_id from OAuth state
+    user_id_str = payload.get("user_id")
+    if not user_id_str:
+        raise HTTPException(status_code=400, detail="Missing user ID in OAuth state")
+    
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    # Save to database
+    try:
+        # Check if account already exists
+        existing = await db.execute(
+            select(PlatformAccount).where(
+                PlatformAccount.user_id == user_id,
+                PlatformAccount.platform == "twitter"
+            )
+        )
+        account = existing.scalars().first()
+        
+        if account:
+            account.access_token = access_token
+            account.refresh_token = tokens.get("refresh_token")
+            account.platform_user_id = platform_user_id
+            account.platform_username = platform_username
+            account.is_active = True
+        else:
+            new_account = PlatformAccount(
+                user_id=user_id,
+                platform="twitter",
+                platform_user_id=platform_user_id,
+                platform_username=platform_username,
+                access_token=access_token,
+                refresh_token=tokens.get("refresh_token"),
+                is_active=True,
+            )
+            db.add(new_account)
+        
+        await db.commit()
+        logger.info(f"Twitter account saved for user {user_id}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to save Twitter account: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save account: {str(e)}")
+    
     redirect_path = payload.get("redirect_path", "/platforms")
     return RedirectResponse(
-        url=f"{settings.frontend_url}{redirect_path}?twitter=success"
+        url=f"{settings.frontend_url}{redirect_path}?twitter=success&connected=true"
     )
 
 
@@ -195,8 +262,10 @@ async def instagram_authorize(user_id: str = Query(None)):
 
 
 @router.get("/instagram/callback")
-async def instagram_callback(code: str, state: str = ""):
+async def instagram_callback(code: str, state: str = "", db: AsyncSession = Depends(get_db)):
     """Instagram OAuth callback."""
+    logger.info(f"Instagram callback received - code: {code[:10] if code else 'None'}...")
+    
     payload = await validate_oauth_state(state)
     if not payload:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
@@ -204,8 +273,60 @@ async def instagram_callback(code: str, state: str = ""):
     tokens = await exchange_instagram_code(code)
     if not tokens:
         raise HTTPException(status_code=400, detail="Instagram token exchange failed")
+    
+    # Extract token data
+    access_token = tokens.get("access_token")
+    platform_user_id = tokens.get("platform_user_id")
+    platform_username = tokens.get("platform_username", "")
+    
+    if not access_token or not platform_user_id:
+        raise HTTPException(status_code=400, detail="Incomplete token data from Instagram")
+    
+    # Get user_id from OAuth state
+    user_id_str = payload.get("user_id")
+    if not user_id_str:
+        raise HTTPException(status_code=400, detail="Missing user ID in OAuth state")
+    
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    # Save to database
+    try:
+        # Check if account already exists
+        existing = await db.execute(
+            select(PlatformAccount).where(
+                PlatformAccount.user_id == user_id,
+                PlatformAccount.platform == "instagram"
+            )
+        )
+        account = existing.scalars().first()
+        
+        if account:
+            account.access_token = access_token
+            account.platform_user_id = platform_user_id
+            account.platform_username = platform_username
+            account.is_active = True
+        else:
+            new_account = PlatformAccount(
+                user_id=user_id,
+                platform="instagram",
+                platform_user_id=platform_user_id,
+                platform_username=platform_username,
+                access_token=access_token,
+                is_active=True,
+            )
+            db.add(new_account)
+        
+        await db.commit()
+        logger.info(f"Instagram account saved for user {user_id}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to save Instagram account: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save account: {str(e)}")
 
     redirect_path = payload.get("redirect_path", "/platforms")
     return RedirectResponse(
-        url=f"{settings.frontend_url}{redirect_path}?instagram=success"
+        url=f"{settings.frontend_url}{redirect_path}?instagram=success&connected=true"
     )

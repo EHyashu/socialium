@@ -10,8 +10,8 @@ export async function disconnectPlatform(accountId: string): Promise<void> {
   await api.delete(`/platforms/${accountId}`);
 }
 
-export async function getOAuthUrl(platform: Platform): Promise<string> {
-  const res = await api.get<{ authorization_url: string }>(`/oauth/${platform}/authorize`);
+export async function getOAuthUrl(platform: Platform, userId: string): Promise<string> {
+  const res = await api.get<{ authorization_url: string }>(`/oauth/${platform}/authorize?user_id=${userId}`);
   return res.data.authorization_url;
 }
 

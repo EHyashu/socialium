@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-import WorkspaceSelector from "@/components/WorkspaceSelector";
 import { isAuthenticated } from "@/lib/auth";
 
 export default function DashboardLayout({
@@ -50,17 +49,15 @@ export default function DashboardLayout({
   }
 
   return (
-    <WorkspaceSelector>
-      <div className="flex min-h-screen">
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-        <div 
-          className="flex-1 flex flex-col transition-all duration-400 ease-[0.19,1,0.22,1]"
-          style={{ marginLeft: collapsed ? '80px' : '260px' }}
-        >
-          <Header />
-          <main className="flex-1 p-4 lg:p-8 w-full max-w-7xl">{children}</main>
-        </div>
+    <div className="flex min-h-screen">
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <div 
+        className="flex-1 flex flex-col transition-all duration-400 ease-[0.19,1,0.22,1]"
+        style={{ marginLeft: collapsed ? '80px' : '260px' }}
+      >
+        <Header />
+        <main className="flex-1 p-4 lg:p-8 w-full max-w-7xl">{children}</main>
       </div>
-    </WorkspaceSelector>
+    </div>
   );
 }

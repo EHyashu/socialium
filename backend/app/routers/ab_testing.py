@@ -8,12 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.marketing import ABTestCreate, ABTestResponse
 from app.services.ab_testing_service import create_ab_test, evaluate_ab_test
+from app.models.user import User
+from app.core.auth import get_current_user
 
 router = APIRouter()
 
 
 @router.post("/", response_model=dict)
-async def create_test(body: ABTestCreate, db: AsyncSession = Depends(get_db)):
+async def create_test(
+    body: ABTestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Create a new A/B test."""
     result = await create_ab_test(
         db=db,
@@ -22,7 +28,7 @@ async def create_test(body: ABTestCreate, db: AsyncSession = Depends(get_db)):
         variant_a_body=body.variant_a_body,
         variant_b_body=body.variant_b_body,
         platform=body.platform,
-        author_id=str(uuid.uuid4()),  # TODO: get from auth
+        author_id=str(current_user.id),
         description=body.description,
     )
     return result

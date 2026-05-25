@@ -53,25 +53,50 @@ async def generate_reply(
 ) -> str:
     """Generate an appropriate auto-reply."""
 
-    prompt = f"""You are a social media manager responding to a comment.
+    system_prompt = f"""You are an expert social media manager for a brand.
+Your role is to engage with comments in a friendly, professional manner.
 
-Comment: "{comment_text}"
+Guidelines:
+- Keep replies under 280 characters
+- Match the tone: {tone}
+- Be genuine, not salesy
+- Use emojis appropriately (1-2 max)
+- Never mention competitors
+- Always be positive and helpful
+{f"- Brand voice: {brand_voice}" if brand_voice else ""}"""
+
+    user_prompt = f"""Generate a reply to this comment:
+
 Platform: {platform}
-Tone: {tone}
-{f"Brand voice: {brand_voice}" if brand_voice else ""}
+User comment: "{comment_text}"
 
-Write a brief, friendly, and appropriate reply. Keep it under 280 characters. Just the reply text, nothing else."""
+Write a brief, friendly, and appropriate reply. Just the reply text, nothing else."""
 
     try:
         client = get_openai_client()
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
             max_tokens=150,
             temperature=0.7,
-            name="auto-reply",
         )
-        return response.choices[0].message.content.strip()
+        reply = response.choices[0].message.content.strip()
+        
+        # Ensure reply is under 280 chars
+        if len(reply) > 280:
+            reply = reply[:277] + "..."
+        
+        logger.info(f"Generated auto-reply ({len(reply)} chars) for {platform}")
+        return reply
     except Exception as e:
         logger.error(f"Auto-reply generation failed: {e}")
-        return "Thank you for your comment! 🙌"
+        # Fallback to simple replies based on sentiment
+        if any(word in comment_text.lower() for word in ["love", "great", "awesome", "amazing"]):
+            return "Thank you so much! We really appreciate your support! 🙏✨"
+        elif any(word in comment_text.lower() for word in ["question", "how", "what", "where"]):
+            return "Great question! Let me look into that and get back to you soon. 💬"
+        else:
+            return "Thanks for engaging with our content! We appreciate you! 🙌"

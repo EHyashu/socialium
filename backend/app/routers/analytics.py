@@ -12,15 +12,16 @@ router = APIRouter()
 @router.get("/overview")
 async def get_analytics_overview(
     workspace_id: str = Query(...),
+    days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
 ):
     """Get analytics overview for dashboard."""
     import uuid as uuid_mod
     from datetime import datetime, timedelta
 
-    # Default to last 30 days
+    # Calculate date range based on days parameter
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=30)
+    start_date = end_date - timedelta(days=days)
 
     # Convert workspace_id to UUID
     try:

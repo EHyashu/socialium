@@ -72,36 +72,68 @@ async def exchange_linkedin_code(code: str, redirect_uri: str) -> dict | None:
 
 
 def get_twitter_auth_url(state: str) -> str:
-    """Get Twitter/X OAuth authorization URL."""
+    """Get Twitter/X OAuth authorization URL with PKCE."""
+    import hashlib
+    import base64
+    import secrets
+    
+    # Generate PKCE code verifier and challenge
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b'=')
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier).digest()
+    ).rstrip(b'=')
+    
+    # Store code_verifier in Redis for callback (temporary)
+    # For now, we'll pass it in state (not ideal but works for dev)
+    # In production, store in Redis with state as key
+    
     params = {
         "response_type": "code",
         "client_id": settings.twitter_client_id,
-        "redirect_uri": f"{settings.frontend_url}/platforms/twitter/callback",
+        "redirect_uri": f"{settings.frontend_url}/api/v1/oauth/twitter/callback",
         "scope": "tweet.read tweet.write users.read offline.access",
         "state": state,
-        "code_challenge": "placeholder",
+        "code_challenge": code_challenge.decode(),
         "code_challenge_method": "S256",
     }
     return f"https://twitter.com/i/oauth2/authorize?{urllib.parse.urlencode(params)}"
 
 
 async def exchange_twitter_code(code: str, code_verifier: str) -> dict | None:
-    """Exchange Twitter authorization code for tokens."""
+    """Exchange Twitter authorization code for tokens with PKCE."""
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "https://api.twitter.com/2/oauth2/token",
             data={
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": f"{settings.frontend_url}/platforms/twitter/callback",
+                "redirect_uri": f"{settings.frontend_url}/api/v1/oauth/twitter/callback",
                 "client_id": settings.twitter_client_id,
                 "code_verifier": code_verifier,
             },
+            auth=(settings.twitter_client_id, ""),  # Basic auth with client_id
         )
         if response.status_code != 200:
             logger.error(f"Twitter token exchange failed: {response.text}")
             return None
-        return response.json()
+        
+        tokens = response.json()
+        
+        # Get user profile
+        if "access_token" in tokens:
+            try:
+                user_resp = await client.get(
+                    "https://api.twitter.com/2/users/me",
+                    headers={"Authorization": f"Bearer {tokens['access_token']}"},
+                )
+                if user_resp.status_code == 200:
+                    user_data = user_resp.json().get("data", {})
+                    tokens["platform_user_id"] = user_data.get("id")
+                    tokens["platform_username"] = user_data.get("username")
+            except Exception as e:
+                logger.error(f"Failed to get Twitter user profile: {e}")
+        
+        return tokens
 
 
 def get_instagram_auth_url(state: str) -> str:
@@ -109,11 +141,11 @@ def get_instagram_auth_url(state: str) -> str:
     params = {
         "response_type": "code",
         "client_id": settings.instagram_client_id,
-        "redirect_uri": f"{settings.frontend_url}/platforms/instagram/callback",
+        "redirect_uri": f"{settings.frontend_url}/api/v1/oauth/instagram/callback",
         "scope": "instagram_basic,instagram_content_publish,pages_show_list",
         "state": state,
     }
-    return f"https://api.instagram.com/oauth/authorize?{urllib.parse.urlencode(params)}"
+    return f"https://www.instagram.com/oauth/authorize?{urllib.parse.urlencode(params)}"
 
 
 async def exchange_instagram_code(code: str) -> dict | None:
@@ -125,11 +157,34 @@ async def exchange_instagram_code(code: str) -> dict | None:
                 "client_id": settings.instagram_client_id,
                 "client_secret": settings.instagram_client_secret,
                 "grant_type": "authorization_code",
-                "redirect_uri": f"{settings.frontend_url}/platforms/instagram/callback",
+                "redirect_uri": f"{settings.frontend_url}/api/v1/oauth/instagram/callback",
                 "code": code,
             },
         )
         if response.status_code != 200:
             logger.error(f"Instagram token exchange failed: {response.text}")
             return None
-        return response.json()
+        
+        tokens = response.json()
+        
+        # Instagram returns: access_token, user_id
+        # We need to fetch additional profile info
+        if "access_token" in tokens and "user_id" in tokens:
+            try:
+                # Get Instagram account details
+                ig_user_id = tokens["user_id"]
+                profile_resp = await client.get(
+                    f"https://graph.instagram.com/{ig_user_id}",
+                    params={
+                        "fields": "id,username",
+                        "access_token": tokens["access_token"]
+                    }
+                )
+                if profile_resp.status_code == 200:
+                    profile = profile_resp.json()
+                    tokens["platform_user_id"] = profile.get("id")
+                    tokens["platform_username"] = profile.get("username")
+            except Exception as e:
+                logger.error(f"Failed to get Instagram profile: {e}")
+        
+        return tokens

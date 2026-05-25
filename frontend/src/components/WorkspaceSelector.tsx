@@ -1,194 +1,241 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listWorkspaces, createWorkspace } from "@/services/workspace";
-import { setCurrentWorkspace, getWorkspaceId } from "@/lib/workspace";
-import { getStoredUser } from "@/lib/auth";
-import { Plus, Building2, Loader2 } from "lucide-react";
+import { getCurrentWorkspace, setCurrentWorkspace } from "@/lib/workspace";
+import type { Workspace } from "@/types";
 import toast from "react-hot-toast";
 
-export default function WorkspaceSelector({ children }: { children: React.ReactNode }) {
+interface WorkspaceSelectorProps {
+  compact?: boolean;
+}
+
+export default function WorkspaceSelector({ compact = false }: WorkspaceSelectorProps) {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const user = getStoredUser();
-  const [showSelector, setShowSelector] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [currentWorkspace, setCurrentWorkspaceState] = useState<Workspace | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    loadWorkspaces();
   }, []);
 
-  const { data: workspaces, isLoading } = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: listWorkspaces,
-    enabled: !!user && mounted,
-  });
-
-  useEffect(() => {
-    if (!mounted || !workspaces || workspaces.length === 0) return;
-
-    const currentId = getWorkspaceId();
-    if (!currentId) {
-      // Auto-select first workspace
-      setCurrentWorkspace(workspaces[0]);
+  const loadWorkspaces = async () => {
+    try {
+      const data = await listWorkspaces();
+      setWorkspaces(data);
+      
+      const current = getCurrentWorkspace();
+      if (current && data.some(w => w.id === current.id)) {
+        setCurrentWorkspaceState(current);
+      } else if (data.length > 0) {
+        setCurrentWorkspaceState(data[0]);
+        setCurrentWorkspace(data[0]);
+      }
+    } catch (error) {
+      console.error("Failed to load workspaces:", error);
+    } finally {
+      setLoading(false);
     }
-  }, [workspaces, mounted]);
+  };
 
-  const handleSelect = (workspace: any) => {
+  const handleSelectWorkspace = (workspace: Workspace) => {
+    setCurrentWorkspaceState(workspace);
     setCurrentWorkspace(workspace);
-    setShowSelector(false);
+    setIsOpen(false);
+    toast.success(`Switched to ${workspace.name}`);
     router.refresh();
   };
 
-  const handleCreate = async () => {
-    if (!newWorkspaceName.trim() || creating) return;
-    
-    console.log('Creating workspace:', newWorkspaceName.trim());
-    setCreating(true);
-    
+  const handleCreateWorkspace = async () => {
+    if (!newWorkspaceName.trim()) {
+      toast.error("Workspace name is required");
+      return;
+    }
+
     try {
-      const workspace = await createWorkspace({ name: newWorkspaceName.trim() });
-      console.log('Workspace created successfully:', workspace);
+      const newWorkspace = await createWorkspace({
+        name: newWorkspaceName,
+        description: "",
+      });
       
-      // Invalidate and refetch workspaces list
-      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      console.log('Query cache invalidated');
-      
-      // Set as current workspace
-      setCurrentWorkspace(workspace);
-      console.log('Workspace set as current:', workspace.id);
-      
-      // Hide selector and show toast
-      setShowSelector(false);
-      toast.success(`Workspace "${workspace.name}" created!`);
-      
-      // Force router refresh
-      router.refresh();
-      console.log('Router refreshed, should now show dashboard');
-      
-    } catch (err: any) {
-      const errorMsg = err?.response?.data?.detail || "Failed to create workspace";
-      console.error('Failed to create workspace:', err);
-      console.error('Error response:', err?.response?.data);
-      toast.error(errorMsg);
-    } finally {
-      setCreating(false);
+      setWorkspaces([...workspaces, newWorkspace]);
+      handleSelectWorkspace(newWorkspace);
+      setShowCreateModal(false);
+      setNewWorkspaceName("");
+      toast.success("Workspace created!");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "Failed to create workspace");
     }
   };
 
-  // Show loading until mounted to prevent hydration mismatch
-  if (!mounted || isLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--bg-primary)" }}>
-        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "var(--bg-hover)" }}>
+        <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+        <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading...</span>
       </div>
     );
   }
 
-  if (!workspaces || workspaces.length === 0) {
+  if (compact) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--bg-primary)" }}>
-        <div className="max-w-md w-full mx-4">
-          <div className="text-center mb-8">
-            <Building2 className="h-16 w-16 mx-auto text-brand-500 mb-4" />
-            <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Create Your Workspace</h1>
-            <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
-              A workspace is where you manage your social media accounts and content.
-            </p>
-          </div>
+      <div className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors"
+          style={{ background: "var(--bg-hover)" }}
+        >
+          <span className="material-symbols-outlined text-sm">business</span>
+          <span className="text-sm font-medium truncate max-w-[150px]" style={{ color: "var(--text-primary)" }}>
+            {currentWorkspace?.name || "Select Workspace"}
+          </span>
+          <span className="material-symbols-outlined text-sm">expand_more</span>
+        </button>
 
-          <div className="rounded-2xl p-6 border" style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}>
-            <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-              Workspace Name
-            </label>
-            <input
-              type="text"
-              value={newWorkspaceName}
-              onChange={(e) => setNewWorkspaceName(e.target.value)}
-              placeholder="e.g., My Brand, Acme Corp"
-              className="w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-brand-500"
-              style={{ background: "var(--bg-hover)", borderColor: "var(--border-color)", color: "var(--text-primary)" }}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            />
-            <button
-              onClick={handleCreate}
-              disabled={!newWorkspaceName.trim() || creating}
-              className="w-full mt-4 px-4 py-3 rounded-xl bg-brand-500 text-white font-medium hover:bg-brand-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <div
+              className="absolute top-full left-0 mt-2 w-64 rounded-lg border shadow-xl z-50 overflow-hidden"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}
             >
-              {creating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4" />
+              <div className="p-2 max-h-64 overflow-y-auto">
+                {workspaces.map((workspace) => (
+                  <button
+                    key={workspace.id}
+                    onClick={() => handleSelectWorkspace(workspace)}
+                    className={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+                      currentWorkspace?.id === workspace.id
+                        ? "bg-indigo-600 text-white"
+                        : "hover:bg-white/10"
+                    }`}
+                  >
+                    <p className="text-sm font-medium truncate">{workspace.name}</p>
+                    {workspace.description && (
+                      <p className="text-xs truncate opacity-75">{workspace.description}</p>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t p-2" style={{ borderColor: "var(--border-color)" }}>
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    setShowCreateModal(true);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-white/10 transition-colors"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
                   Create Workspace
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
-  if (showSelector) {
-    return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--bg-primary)" }}>
-        <div className="max-w-md w-full mx-4">
-          <div className="text-center mb-8">
-            <Building2 className="h-16 w-16 mx-auto text-brand-500 mb-4" />
-            <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Select Workspace</h1>
-            <p className="mt-2" style={{ color: "var(--text-secondary)" }}>Choose a workspace to continue</p>
-          </div>
-
-          <div className="space-y-3 mb-6">
-            {workspaces.map((workspace) => (
-              <button
-                key={workspace.id}
-                onClick={() => handleSelect(workspace)}
-                className="w-full p-4 rounded-xl border hover:border-brand-500/50 transition-all text-left"
-                style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}
-              >
-                <p className="font-medium" style={{ color: "var(--text-primary)" }}>{workspace.name}</p>
-                {workspace.description && (
-                  <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>{workspace.description}</p>
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-xl border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}>
-            <p className="text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Create new workspace</p>
-            <div className="flex gap-2">
+        {/* Create Workspace Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div
+              className="w-full max-w-md rounded-xl border shadow-2xl p-6"
+              style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}
+            >
+              <h3 className="text-lg font-bold mb-4" style={{ color: "var(--text-primary)" }}>
+                Create New Workspace
+              </h3>
               <input
                 type="text"
                 value={newWorkspaceName}
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
                 placeholder="Workspace name"
-                className="flex-1 px-3 py-2 rounded-lg border focus:outline-none focus:border-brand-500 text-sm"
-                style={{ background: "var(--bg-hover)", borderColor: "var(--border-color)", color: "var(--text-primary)" }}
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                className="w-full border rounded-lg px-4 py-2 mb-4 focus:outline-none"
+                style={{
+                  background: "var(--bg-hover)",
+                  borderColor: "var(--border-color)",
+                  color: "var(--text-primary)",
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateWorkspace()}
               />
-              <button
-                onClick={handleCreate}
-                disabled={!newWorkspaceName.trim() || creating}
-                className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-400 disabled:opacity-50 flex items-center gap-1"
-              >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Create
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewWorkspaceName("");
+                  }}
+                  className="flex-1 px-4 py-2 rounded-lg border hover:bg-white/10 transition-colors"
+                  style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateWorkspace}
+                  className="flex-1 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                >
+                  Create
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
 
-  return <>{children}</>;
+  // Full version for settings page
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+        Your Workspaces
+      </h3>
+      <div className="space-y-2">
+        {workspaces.map((workspace) => (
+          <button
+            key={workspace.id}
+            onClick={() => handleSelectWorkspace(workspace)}
+            className={`w-full text-left p-4 rounded-lg border transition-all ${
+              currentWorkspace?.id === workspace.id
+                ? "border-indigo-500 bg-indigo-600/10"
+                : "hover:border-gray-400"
+            }`}
+            style={{
+              background: currentWorkspace?.id === workspace.id ? "var(--bg-hover)" : "var(--bg-card)",
+              borderColor: currentWorkspace?.id === workspace.id ? "#6366f1" : "var(--border-color)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {workspace.name}
+                </p>
+                {workspace.description && (
+                  <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+                    {workspace.description}
+                  </p>
+                )}
+              </div>
+              {currentWorkspace?.id === workspace.id && (
+                <span className="material-symbols-outlined" style={{ color: "#6366f1" }}>
+                  check_circle
+                </span>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => setShowCreateModal(true)}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed hover:bg-white/5 transition-colors"
+        style={{ borderColor: "var(--border-color)", color: "var(--text-secondary)" }}
+      >
+        <span className="material-symbols-outlined">add</span>
+        Create New Workspace
+      </button>
+    </div>
+  );
 }

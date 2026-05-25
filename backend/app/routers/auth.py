@@ -27,9 +27,23 @@ router = APIRouter(tags=["Auth"])
 @router.post("/auth/signup", response_model=TokenResponse)
 async def signup(body: SignUpRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Validate password length (Supabase requires min 6 characters)
+    if len(body.password) < 6:
+        raise HTTPException(
+            status_code=400, 
+            detail="Password must be at least 6 characters long"
+        )
+    
     result = await supabase_sign_up(body.email, body.password)
     if not result:
-        raise HTTPException(status_code=400, detail="Signup failed")
+        logger.error(f"Signup failed for email: {body.email}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Signup failed. This email may already be registered or Supabase configuration is incorrect."
+        )
 
     user_id_str = result.get("user", {}).get("id") or result.get("id")
     user_id = uuid_mod.UUID(user_id_str) if isinstance(user_id_str, str) else user_id_str

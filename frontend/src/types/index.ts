@@ -240,3 +240,46 @@ export interface ScheduledPost {
   scheduled_at: string | null;
   status: ContentStatus;
 }
+
+/* ===== A/B Testing ===== */
+
+export interface ABTest {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  platform: Platform;
+  variant_a_id: string;
+  variant_b_id: string;
+  author_id: string;
+  status: 'draft' | 'running' | 'completed' | 'cancelled';
+  winner_variant: 'A' | 'B' | null;
+  confidence_score: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface ABTestCreate {
+  workspace_id: string;
+  name: string;
+  description?: string;
+  platform: Platform;
+  variant_a_body: string;
+  variant_b_body: string;
+}
+
+export interface ABTestResult {
+  test: ABTest;
+  variant_a_stats: {
+    impressions: number;
+    engagements: number;
+    engagement_rate: number;
+  };
+  variant_b_stats: {
+    impressions: number;
+    engagements: number;
+    engagement_rate: number;
+  };
+  recommendation: string;
+}

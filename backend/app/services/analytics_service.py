@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.content import Content
 from app.models.analytics import AnalyticsEvent
+from app.services.linkedin_analytics import sync_linkedin_analytics
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,16 @@ async def get_analytics_summary(
         end_date = date.today()
     if not start_date:
         start_date = end_date - timedelta(days=30)
+
+    # Sync LinkedIn analytics before computing summary (if workspace provided)
+    if workspace_id and (platform is None or platform == "linkedin"):
+        try:
+            synced = await sync_linkedin_analytics(db, workspace_id)
+            if synced > 0:
+                logger.info(f"Synced {synced} LinkedIn posts analytics")
+        except Exception as e:
+            logger.error(f"Failed to sync LinkedIn analytics: {e}")
+            # Continue with existing data even if sync fails
 
     # Query content within date range
     content_query = select(Content).where(

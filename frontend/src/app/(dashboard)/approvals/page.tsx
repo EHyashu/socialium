@@ -2,28 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, XCircle, Edit3, MessageCircle } from "lucide-react";
+import { CheckCircle, XCircle, Edit3, MessageCircle, Eye } from "lucide-react";
 import { requireWorkspaceId } from "@/lib/workspace";
-import { safeArray } from "@/lib/utils";
+import { listContent } from "@/services/content";
+import { listApprovals, submitApproval } from "@/services/approvals";
+import type { Content } from "@/types";
+import type { Approval } from "@/services/approvals";
 import toast from "react-hot-toast";
+import Link from "next/link";
 
-interface Approval {
-  id: string;
-  content_id: string;
-  reviewer_id: string;
-  action: "approve" | "reject" | "request_changes";
-  comment: string | null;
-  created_at: string;
-}
-
-interface ContentItem {
-  id: string;
-  title: string;
-  body: string;
-  platform: string;
-  status: string;
-  author_email: string | null;
-  created_at: string;
+interface ContentItem extends Content {
+  author_email?: string;
 }
 
 export default function ApprovalsPage() {
@@ -43,28 +32,15 @@ export default function ApprovalsPage() {
 
   const loadData = async () => {
     try {
-      const token = localStorage.getItem("access_token");
-      const [approvalsRes, contentRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/approvals?workspace_id=${workspaceId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/content?workspace_id=${workspaceId}&status=pending_approval`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+      const [approvalsData, contentData] = await Promise.all([
+        listApprovals(workspaceId),
+        listContent(workspaceId, "pending_approval"),
       ]);
 
-      const approvalsData = await approvalsRes.json();
-      const contentData = await contentRes.json();
-
-      console.log('Approvals loaded:', approvalsData);
-      console.log('Pending content loaded:', contentData);
-
-      // Ensure data is always an array
-      setApprovals(safeArray<Approval>(approvalsData));
-      setPendingContent(safeArray<ContentItem>(contentData));
+      setApprovals(approvalsData);
+      setPendingContent(contentData as ContentItem[]);
     } catch (error) {
       console.error("Failed to load approvals:", error);
-      // Reset to empty arrays on error
       setApprovals([]);
       setPendingContent([]);
     } finally {
@@ -74,39 +50,25 @@ export default function ApprovalsPage() {
 
   const handleApproval = async (contentId: string, action: string) => {
     if (!contentId) {
-      toast.error("Please select content to approve");
+      toast.error("Please select content");
       return;
     }
 
     setSubmitting(true);
     try {
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/approvals?content_id=${contentId}&action=${action}&comment=${encodeURIComponent(comment)}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
+      const data = await submitApproval(contentId, action as any, comment);
       
-      if (response.ok) {
-        if (data.auto_scheduled) {
-          toast.success(`Content approved & auto-scheduled for ${new Date(data.scheduled_at).toLocaleString()}`);
-        } else {
-          toast.success(`Content ${action === "approve" ? "approved" : action === "reject" ? "rejected" : "changes requested"}`);
-        }
-        setComment("");
-        setSelectedContent(null);
-        loadData();
+      if (data.auto_scheduled) {
+        toast.success(`Approved & scheduled for ${new Date(data.scheduled_at).toLocaleString()}`);
       } else {
-        toast.error(data.detail || "Failed to submit approval");
+        toast.success(`Content ${action === "approve" ? "approved" : action === "reject" ? "rejected" : "changes requested"}`);
       }
-    } catch (error) {
-      toast.error("Failed to submit approval");
+      
+      setComment("");
+      setSelectedContent(null);
+      loadData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "Failed to submit approval");
     } finally {
       setSubmitting(false);
     }
@@ -222,8 +184,8 @@ export default function ApprovalsPage() {
                   </div>
                   
                   {/* Content Preview */}
-                  <div className="mb-3 p-3 rounded text-sm" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-                    {content.body}
+                  <div className="mb-3 p-3 rounded text-sm line-clamp-3" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
+                    {content.body || "No content body"}
                   </div>
                   
                   {/* Action Buttons */}
@@ -250,16 +212,13 @@ export default function ApprovalsPage() {
                       <XCircle className="h-4 w-4" />
                       Reject
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedContent(content.id);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium bg-amber-600 text-white hover:bg-amber-700 text-sm"
+                    <Link
+                      href={`/content/${content.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 text-sm"
                     >
-                      <Edit3 className="h-4 w-4" />
-                      Edit
-                    </button>
+                      <Eye className="h-4 w-4" />
+                    </Link>
                   </div>
                 </motion.div>
               ))}

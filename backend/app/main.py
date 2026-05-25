@@ -19,7 +19,6 @@ from app.routers import (
     approvals,
     auth,
     auto_reply,
-    billing,
     content,
     memory,
     notifications,
@@ -101,7 +100,9 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:3002",
         "http://localhost:3003",
+        "http://127.0.0.1:3000",
     ],
+    allow_origin_regex="http://localhost:\d+|http://127\.0\.0\.1:\d+|http://\d+\.\d+\.\d+\.\d+:\d+" if settings.debug else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -123,7 +124,6 @@ app.include_router(oauth.router, prefix=f"{api_prefix}/oauth", tags=["OAuth"])
 app.include_router(approvals.router, prefix=f"{api_prefix}/approvals", tags=["Approvals"])
 app.include_router(scheduling.router, prefix=f"{api_prefix}/scheduling", tags=["Scheduling"])
 app.include_router(analytics.router, prefix=f"{api_prefix}/analytics", tags=["Analytics"])
-app.include_router(billing.router, prefix=f"{api_prefix}/billing", tags=["Billing"])
 app.include_router(memory.router, prefix=f"{api_prefix}/memory", tags=["Memory"])
 app.include_router(notifications.router, prefix=f"{api_prefix}/notifications", tags=["Notifications"])
 app.include_router(trends.router, prefix=f"{api_prefix}/trends", tags=["Trends"])

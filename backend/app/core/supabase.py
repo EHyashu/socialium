@@ -75,6 +75,9 @@ async def supabase_admin_delete_user(user_id: str) -> bool:
 
 async def supabase_sign_up(email: str, password: str) -> dict | None:
     """Create a new user in Supabase Auth using admin API (auto-confirms)."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     headers = get_supabase_headers()
     async with httpx.AsyncClient() as client:
         # Use admin endpoint to create pre-confirmed user
@@ -89,12 +92,15 @@ async def supabase_sign_up(email: str, password: str) -> dict | None:
         )
         if response.status_code in (200, 201):
             user_data = response.json()
+            logger.info(f"User created successfully: {email}")
             # Now sign in to get tokens
             sign_in_result = await supabase_sign_in(email, password)
             if sign_in_result:
                 return sign_in_result
             # Fallback: return user data without tokens
             return user_data
+        else:
+            logger.error(f"Supabase signup failed for {email}: {response.status_code} - {response.text}")
         return None
 
 

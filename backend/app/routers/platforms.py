@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.platform_account import PlatformAccount
+from app.models.user import User
 from app.schemas.platform import PlatformAccountResponse
+from app.core.auth import get_current_user
 
 router = APIRouter()
 
@@ -32,11 +34,16 @@ async def get_platform(platform_id: uuid.UUID, db: AsyncSession = Depends(get_db
 
 
 @router.delete("/revoke")
-async def revoke_all_platforms(db: AsyncSession = Depends(get_db)):
+async def revoke_all_platforms(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Revoke all platform connections for the current user."""
-    # TODO: get user_id from auth context
     result = await db.execute(
-        select(PlatformAccount).where(PlatformAccount.is_active == True)
+        select(PlatformAccount).where(
+            PlatformAccount.user_id == current_user.id,
+            PlatformAccount.is_active == True
+        )
     )
     accounts = result.scalars().all()
     for account in accounts:

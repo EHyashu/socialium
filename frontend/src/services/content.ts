@@ -4,7 +4,7 @@ import type { Content, ContentCreateRequest, ContentGenerateRequest, GenerateRes
 export async function listContent(workspaceId?: string, status?: string): Promise<Content[]> {
   const params = new URLSearchParams();
   if (workspaceId) params.set("workspace_id", workspaceId);
-  if (status) params.set("status", status);
+  if (status) params.set("status_filter", status);  // Fixed: backend expects status_filter
   const res = await api.get<Content[]>(`/content?${params.toString()}`);
   return res.data;
 }
