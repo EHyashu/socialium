@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.services.analytics_service import get_analytics_summary
+from app.services.linkedin_analytics import sync_linkedin_analytics
 
 router = APIRouter()
 
@@ -37,6 +38,32 @@ async def get_analytics_overview(
         end_date=end_date.date(),
     )
     return data
+
+
+@router.post("/sync-linkedin")
+async def sync_linkedin_analytics_endpoint(
+    workspace_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually trigger LinkedIn analytics sync."""
+    import uuid as uuid_mod
+    
+    try:
+        workspace_uuid = uuid_mod.UUID(workspace_id)
+    except ValueError:
+        return {"error": "Invalid workspace_id format", "synced_count": 0}
+    
+    try:
+        synced = await sync_linkedin_analytics(db, workspace_uuid)
+        return {
+            "message": f"Successfully synced {synced} LinkedIn posts",
+            "synced_count": synced,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "synced_count": 0,
+        }
 
 
 @router.get("/")

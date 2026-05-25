@@ -92,6 +92,28 @@ def start_scheduler() -> None:
         max_instances=1,
     )
 
+    # LinkedIn analytics sync - every 15 minutes
+    _scheduler.add_job(
+        _linkedin_analytics_wrapper,
+        "interval",
+        minutes=15,
+        id="linkedin_analytics_sync",
+        executor="default",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # LinkedIn auto-reply polling - every 5 minutes
+    _scheduler.add_job(
+        _linkedin_autoreply_wrapper,
+        "interval",
+        minutes=5,
+        id="linkedin_comment_polling",
+        executor="default",
+        replace_existing=True,
+        max_instances=1,
+    )
+
     _scheduler.start()
     logger.info("APScheduler started with periodic tasks")
 
@@ -127,3 +149,15 @@ async def _analytics_wrapper() -> None:
     """Wrapper for analytics collection."""
     from app.workers.analytics_worker import collect_engagement_analytics
     await collect_engagement_analytics()
+
+
+async def _linkedin_analytics_wrapper() -> None:
+    """Wrapper for LinkedIn analytics sync."""
+    from app.workers.analytics_worker import sync_all_linkedin_analytics
+    await sync_all_linkedin_analytics()
+
+
+async def _linkedin_autoreply_wrapper() -> None:
+    """Wrapper for LinkedIn auto-reply polling."""
+    from app.workers.analytics_worker import poll_all_linkedin_comments
+    await poll_all_linkedin_comments()

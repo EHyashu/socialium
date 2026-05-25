@@ -57,7 +57,10 @@ export async function getOptimalTime(contentId: string, targetAudience: string =
 
 export async function autoScheduleContent(contentId: string, targetAudience: string = "") {
   const res = await api.post(`/scheduling/${contentId}/auto-schedule`, null, {
-    params: { target_audience: targetAudience },
+    params: { 
+      target_audience: targetAudience,
+      workspace_id: localStorage.getItem("workspace_id") || ""
+    },
   });
   return res.data;
 }

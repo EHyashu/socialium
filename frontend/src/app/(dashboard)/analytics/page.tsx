@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { requireWorkspaceId } from "@/lib/workspace";
 import { getAnalyticsOverview } from "@/services/analytics";
+import { syncLinkedInAnalytics } from "@/services/sync";
 import toast from "react-hot-toast";
 
 interface PlatformData {
@@ -21,6 +22,7 @@ export default function NewAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<any>(null);
   const [days, setDays] = useState(30);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -29,15 +31,36 @@ export default function NewAnalyticsPage() {
   useEffect(() => {
     if (!workspaceId || !mounted) return;
     
-    setLoading(true);
-    getAnalyticsOverview(workspaceId, days)
-      .then((data) => setAnalytics(data))
-      .catch((err) => {
-        console.error("Failed to load analytics:", err);
-        toast.error("Failed to load analytics");
-      })
-      .finally(() => setLoading(false));
+    loadAnalytics();
   }, [workspaceId, days, mounted]);
+
+  const loadAnalytics = async () => {
+    setLoading(true);
+    try {
+      const data = await getAnalyticsOverview(workspaceId, days);
+      setAnalytics(data);
+    } catch (err) {
+      console.error("Failed to load analytics:", err);
+      toast.error("Failed to load analytics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSyncLinkedIn = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncLinkedInAnalytics(workspaceId);
+      toast.success(result.message || `Synced ${result.synced_count} posts`);
+      // Reload analytics after sync
+      await loadAnalytics();
+    } catch (error: any) {
+      console.error("Sync failed:", error);
+      toast.error(error.response?.data?.error || "Failed to sync LinkedIn analytics");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (!mounted || loading) {
     return (

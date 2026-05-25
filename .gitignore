@@ -83,3 +83,4 @@ credentials/
 *.bak
 *.tmp
 *.temp
+*.db

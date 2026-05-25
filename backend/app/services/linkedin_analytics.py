@@ -92,7 +92,7 @@ async def sync_linkedin_analytics(
             Content.workspace_id == workspace_id,
             Content.platform == "linkedin",
             Content.status == "published",
-            Content.platform_user_id.isnot(None),  # Has LinkedIn post URN
+            Content.platform_post_id.isnot(None),  # Has LinkedIn post URN
         )
     )
     contents = result.scalars().all()
