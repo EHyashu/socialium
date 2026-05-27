@@ -1,10 +1,14 @@
-# Dependencies
+backend/socialium.db
+*.db
+
+.qoder/# Dependencies
 node_modules
 vendor/
 
 # Build outputs
 .next
-out/
+*.db
+.qoder/out/
 dist
 build
 
