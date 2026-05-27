@@ -1,4 +1,4 @@
-"""Content Timeline Component - Visualizes content workflow progress."""
+// Content Timeline Component - Visualizes content workflow progress.
 
 interface TimelineStep {
   name: string;

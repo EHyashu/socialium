@@ -118,18 +118,33 @@ const NAV_ITEMS = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  isMobile?: boolean;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ 
+  collapsed, 
+  onToggle,
+  isMobile = false,
+  mobileOpen = false,
+  onMobileClose
+}: SidebarProps) {
   const pathname = usePathname();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   return (
     <motion.aside
       initial={false}
-      animate={{ width: collapsed ? 80 : 260 }}
+      animate={
+        isMobile
+          ? { x: mobileOpen ? 0 : -260, width: 260 }
+          : { x: 0, width: collapsed ? 80 : 260 }
+      }
       transition={{ duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
-      className="fixed left-0 top-0 z-40 h-screen flex-shrink-0 flex flex-col border-r border-[var(--border-color)] overflow-hidden"
+      className={`fixed left-0 top-0 z-40 h-screen flex-shrink-0 flex flex-col border-r border-[var(--border-color)] overflow-hidden ${
+        isMobile ? "shadow-2xl" : ""
+      }`}
       style={{
         background: "var(--bg-secondary)",
       }}
@@ -138,12 +153,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="absolute top-0 left-0 w-40 h-40 bg-indigo-600/10 rounded-full blur-[80px] -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
 
       {/* Logo */}
-      <div className="relative flex items-center h-16 px-5 border-b border-[var(--border-color)]">
+      <div className="relative flex items-center justify-between h-16 px-5 border-b border-[var(--border-color)]">
         <motion.div
           className="flex items-center gap-3 cursor-pointer"
-          onClick={onToggle}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          onClick={isMobile ? undefined : onToggle}
+          whileHover={isMobile ? {} : { scale: 1.02 }}
+          whileTap={isMobile ? {} : { scale: 0.98 }}
         >
           {/* Animated logo mark */}
           <div className="relative w-9 h-9 flex-shrink-0">
@@ -167,6 +182,16 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
           </AnimatePresence>
         </motion.div>
+
+        {isMobile && onMobileClose && (
+          <button
+            onClick={onMobileClose}
+            className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white/5 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+            aria-label="Close Menu"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        )}
       </div>
 
       {/* Navigation */}

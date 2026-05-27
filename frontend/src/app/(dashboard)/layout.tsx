@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import { isAuthenticated } from "@/lib/auth";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function DashboardLayout({
   children,
@@ -12,8 +13,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [checking, setChecking] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -37,6 +41,19 @@ export default function DashboardLayout({
     checkAuth();
   }, [router]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   if (checking) {
     return (
       <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--bg-primary)" }}>
@@ -50,14 +67,35 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      {/* Backdrop for mobile */}
+      <AnimatePresence>
+        {isMobile && mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.6 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileOpen(false)}
+            className="fixed inset-0 z-35 bg-black backdrop-blur-sm cursor-pointer"
+          />
+        )}
+      </AnimatePresence>
+
+      <Sidebar 
+        collapsed={isMobile ? false : collapsed} 
+        onToggle={() => setCollapsed(!collapsed)} 
+        isMobile={isMobile}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+      />
+
       <div 
-        className="flex-1 flex flex-col transition-all duration-400 ease-[0.19,1,0.22,1]"
-        style={{ marginLeft: collapsed ? '80px' : '260px' }}
+        className="flex-1 flex flex-col transition-all duration-400 ease-[0.19,1,0.22,1] min-w-0"
+        style={{ marginLeft: isMobile ? '0px' : (collapsed ? '80px' : '260px') }}
       >
-        <Header />
-        <main className="flex-1 p-4 lg:p-8 w-full max-w-7xl">{children}</main>
+        <Header onMenuToggle={() => setMobileOpen(!mobileOpen)} />
+        <main className="flex-1 p-4 pb-24 md:pb-8 lg:p-8 w-full max-w-7xl mx-auto">{children}</main>
       </div>
     </div>
   );
 }
+

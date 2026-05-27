@@ -14,13 +14,18 @@ import {
   User, 
   Settings, 
   Zap, 
-  Sparkles 
+  Sparkles,
+  Menu
 } from "lucide-react";
 import { getStoredUser, logout } from "@/lib/auth";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useUIStore } from "@/store/use-ui-store";
 
-export default function Header() {
+interface HeaderProps {
+  onMenuToggle?: () => void;
+}
+
+export default function Header({ onMenuToggle }: HeaderProps) {
   const { toggleCommandPalette } = useUIStore();
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
@@ -39,19 +44,31 @@ export default function Header() {
 
   return (
     <header 
-      className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/80 backdrop-blur-xl px-6"
+      className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/80 backdrop-blur-xl px-4 sm:px-6"
     >
       {/* Left: Breadcrumb / Path hint */}
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">
-        <span className="hover:text-brand-500 transition-colors cursor-default">Socialium</span>
-        <span className="text-[var(--text-muted)]/50">/</span>
-        <span className="text-[var(--text-secondary)]">
-          {pathname.split("/").filter(Boolean).pop() || "dashboard"}
-        </span>
+      <div className="flex items-center gap-2 sm:gap-3">
+        {onMenuToggle && (
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-brand-500 transition-all"
+            aria-label="Toggle Menu"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+        )}
+        
+        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">
+          <span className="hidden sm:inline hover:text-brand-500 transition-colors cursor-default">Socialium</span>
+          <span className="hidden sm:inline text-[var(--text-muted)]/50">/</span>
+          <span className="text-[var(--text-secondary)]">
+            {pathname.split("/").filter(Boolean).pop() || "dashboard"}
+          </span>
+        </div>
       </div>
 
       {/* Middle/Right: Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         
         {/* Global Search / Cmd+K Trigger */}
         <button
@@ -102,7 +119,7 @@ export default function Header() {
           <motion.button
             whileHover={{ scale: 1.02, y: -1 }}
             whileTap={{ scale: 0.98 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-brand-500 to-violet-600 text-white text-[11px] font-black uppercase tracking-widest shadow-[0_8px_20px_rgba(99,102,241,0.3)] hover:shadow-[0_8px_25px_rgba(99,102,241,0.5)] transition-all"
+            className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-brand-500 to-violet-600 text-white text-[11px] font-black uppercase tracking-widest shadow-[0_8px_20px_rgba(99,102,241,0.3)] hover:shadow-[0_8px_25px_rgba(99,102,241,0.5)] transition-all"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>Create</span>

@@ -21,6 +21,10 @@ interface ViralScore {
   };
   viral_probability: string;
   recommendation: string;
+  optimal_schedule_window: {
+    day: string;
+    time: string;
+  };
 }
 
 export default function ViralScoringPage() {
