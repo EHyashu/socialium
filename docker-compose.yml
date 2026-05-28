@@ -7,7 +7,7 @@ services:
     container_name: socialium-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_DB: socialium
       POSTGRES_USER: socialium_user
@@ -28,7 +28,7 @@ services:
     container_name: socialium-cache
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -46,8 +46,8 @@ services:
     container_name: socialium-qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "6335:6333"
+      - "6336:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
@@ -63,7 +63,7 @@ services:
     container_name: socialium-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - APP_NAME=Socialium
       - APP_ENV=development
@@ -72,7 +72,7 @@ services:
       - DATABASE_ECHO=false
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://localhost:3001
       - API_V1_PREFIX=/api/v1
       # Copy these from your .env file
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -125,9 +125,9 @@ services:
     container_name: socialium-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
       - NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY}
       - NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
     volumes:

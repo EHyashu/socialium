@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { requireWorkspaceId } from "@/lib/workspace";
@@ -25,6 +25,13 @@ export default function NewContentGeneratorPage() {
   const [enableABTesting, setEnableABTesting] = useState(false);
   const [enableTrendBoost, setEnableTrendBoost] = useState(false);
   const [selectedIndustry, setSelectedIndustry] = useState("technology");
+  
+  // Tooltip states
+  const [showABTooltip, setShowABTooltip] = useState(false);
+  const [showTrendTooltip, setShowTrendTooltip] = useState(false);
+  const [showViralTooltip, setShowViralTooltip] = useState(false);
+  const [showNotificationsTooltip, setShowNotificationsTooltip] = useState(false);
+  const [showBillingTooltip, setShowBillingTooltip] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -294,9 +301,38 @@ export default function NewContentGeneratorPage() {
             
             {/* A/B Testing Toggle */}
             <div className="flex items-center justify-between rounded-xl p-4 border" style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}>
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>A/B Testing</span>
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Generate multiple variants for testing</span>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>A/B Testing</span>
+                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Generate multiple variants for testing</span>
+                </div>
+                <div className="relative">
+                  <button
+                    onMouseEnter={() => setShowABTooltip(true)}
+                    onMouseLeave={() => setShowABTooltip(false)}
+                    onClick={() => setShowABTooltip(!showABTooltip)}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  >
+                    i
+                  </button>
+                  <AnimatePresence>
+                    {showABTooltip && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute left-0 bottom-full mb-2 w-64 p-3 rounded-lg shadow-lg z-50"
+                        style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+                      >
+                        <p className="text-xs" style={{ color: "var(--text-primary)" }}>
+                          <strong>A/B Testing</strong> creates 2-3 different versions of your content so you can test which performs better. The system will track engagement metrics and automatically learn which style works best for your audience.
+                        </p>
+                        <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent" style={{ borderTopColor: "var(--border-color)" }} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
               <button
                 onClick={() => setEnableABTesting(!enableABTesting)}
@@ -314,9 +350,38 @@ export default function NewContentGeneratorPage() {
 
             {/* Trend Boost Toggle */}
             <div className="flex items-center justify-between rounded-xl p-4 border" style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}>
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Trend Boost</span>
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Incorporate trending topics from Google, LinkedIn & Reddit</span>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Trend Boost</span>
+                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Incorporate trending topics from Google, LinkedIn & Reddit</span>
+                </div>
+                <div className="relative">
+                  <button
+                    onMouseEnter={() => setShowTrendTooltip(true)}
+                    onMouseLeave={() => setShowTrendTooltip(false)}
+                    onClick={() => setShowTrendTooltip(!showTrendTooltip)}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  >
+                    i
+                  </button>
+                  <AnimatePresence>
+                    {showTrendTooltip && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute left-0 bottom-full mb-2 w-64 p-3 rounded-lg shadow-lg z-50"
+                        style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+                      >
+                        <p className="text-xs" style={{ color: "var(--text-primary)" }}>
+                          <strong>Trend Boost</strong> analyzes real-time trending topics from Google Trends, LinkedIn, and Reddit in your industry. It then intelligently incorporates these trends into your content to maximize reach and engagement.
+                        </p>
+                        <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent" style={{ borderTopColor: "var(--border-color)" }} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
               <button
                 onClick={() => setEnableTrendBoost(!enableTrendBoost)}

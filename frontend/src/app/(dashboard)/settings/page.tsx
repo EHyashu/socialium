@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { getUserProfile, updateUserProfile, updateNotificationSettings, updateAISettings, deleteAccount } from "@/services/settings";
 import { getStoredUser } from "@/lib/auth";
 import { logout } from "@/lib/auth";
@@ -25,6 +25,14 @@ export default function NewSettingsPage() {
   // AI settings
   const [defaultTone, setDefaultTone] = useState("Professional");
   const [creativityLevel, setCreativityLevel] = useState(50);
+  
+  // Tooltip states
+  const [showEmailTooltip, setShowEmailTooltip] = useState(false);
+  const [showWhatsappTooltip, setShowWhatsappTooltip] = useState(false);
+  const [showPushTooltip, setShowPushTooltip] = useState(false);
+  const [showToneTooltip, setShowToneTooltip] = useState(false);
+  const [showCreativityTooltip, setShowCreativityTooltip] = useState(false);
+  const [showBillingTooltip, setShowBillingTooltip] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -193,14 +201,75 @@ export default function NewSettingsPage() {
           <h2 className="text-xl font-bold mb-6" style={{ color: "var(--text-primary)" }}>Notifications</h2>
           <div className="space-y-6">
             {[
-              { label: "Email Notifications", description: "Receive updates via email", enabled: emailNotifs, type: "email_notifications" },
-              { label: "WhatsApp Alerts", description: "Get approval requests on WhatsApp", enabled: whatsappNotifs, type: "whatsapp_notifications" },
-              { label: "Push Notifications", description: "Browser notifications", enabled: pushNotifs, type: "push_notifications" },
+              { 
+                label: "Email Notifications", 
+                description: "Receive updates via email", 
+                enabled: emailNotifs, 
+                type: "email_notifications",
+                tooltip: "Get important updates, content approvals, and scheduled post confirmations delivered to your email inbox. Perfect for staying informed even when you're not actively using the app."
+              },
+              { 
+                label: "WhatsApp Alerts", 
+                description: "Get approval requests on WhatsApp", 
+                enabled: whatsappNotifs, 
+                type: "whatsapp_notifications",
+                tooltip: "Receive instant WhatsApp messages when content needs your approval. Respond quickly with 'APPROVE' or 'REJECT' to keep your content pipeline moving."
+              },
+              { 
+                label: "Push Notifications", 
+                description: "Browser notifications", 
+                enabled: pushNotifs, 
+                type: "push_notifications",
+                tooltip: "Get instant browser notifications for real-time updates. Works even when you have the app open in another tab. Requires browser permission."
+              },
             ].map((setting, index) => (
               <div key={index} className="flex items-center justify-between">
-                <div>
-                  <p className="text-base" style={{ color: "var(--text-primary)" }}>{setting.label}</p>
-                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{setting.description}</p>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-base" style={{ color: "var(--text-primary)" }}>{setting.label}</p>
+                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{setting.description}</p>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onMouseEnter={() => {
+                        if (setting.type === "email_notifications") setShowEmailTooltip(true);
+                        if (setting.type === "whatsapp_notifications") setShowWhatsappTooltip(true);
+                        if (setting.type === "push_notifications") setShowPushTooltip(true);
+                      }}
+                      onMouseLeave={() => {
+                        if (setting.type === "email_notifications") setShowEmailTooltip(false);
+                        if (setting.type === "whatsapp_notifications") setShowWhatsappTooltip(false);
+                        if (setting.type === "push_notifications") setShowPushTooltip(false);
+                      }}
+                      onClick={() => {
+                        if (setting.type === "email_notifications") setShowEmailTooltip(!showEmailTooltip);
+                        if (setting.type === "whatsapp_notifications") setShowWhatsappTooltip(!showWhatsappTooltip);
+                        if (setting.type === "push_notifications") setShowPushTooltip(!showPushTooltip);
+                      }}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors flex-shrink-0"
+                      style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                    >
+                      i
+                    </button>
+                    <AnimatePresence>
+                      {((setting.type === "email_notifications" && showEmailTooltip) ||
+                        (setting.type === "whatsapp_notifications" && showWhatsappTooltip) ||
+                        (setting.type === "push_notifications" && showPushTooltip)) && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 5 }}
+                          className="absolute left-0 bottom-full mb-2 w-64 p-3 rounded-lg shadow-lg z-50"
+                          style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+                        >
+                          <p className="text-xs" style={{ color: "var(--text-primary)" }}>
+                            {setting.tooltip}
+                          </p>
+                          <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent" style={{ borderTopColor: "var(--border-color)" }} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 
@@ -231,7 +300,36 @@ export default function NewSettingsPage() {
           <h2 className="text-xl font-bold mb-6" style={{ color: "var(--text-primary)" }}>AI Configuration</h2>
           <div className="space-y-6">
             <div>
-              <label className="block text-sm mb-2" style={{ color: "var(--text-secondary)" }}>Default Tone</label>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="text-sm" style={{ color: "var(--text-secondary)" }}>Default Tone</label>
+                <div className="relative">
+                  <button
+                    onMouseEnter={() => setShowToneTooltip(true)}
+                    onMouseLeave={() => setShowToneTooltip(false)}
+                    onClick={() => setShowToneTooltip(!showToneTooltip)}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  >
+                    i
+                  </button>
+                  <AnimatePresence>
+                    {showToneTooltip && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute left-0 bottom-full mb-2 w-64 p-3 rounded-lg shadow-lg z-50"
+                        style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+                      >
+                        <p className="text-xs" style={{ color: "var(--text-primary)" }}>
+                          <strong>Default Tone</strong> sets the writing style for all AI-generated content. Choose Professional for business content, Casual for friendly posts, Humorous for engaging content, or Inspirational for motivational messages.
+                        </p>
+                        <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent" style={{ borderTopColor: "var(--border-color)" }} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
               <select 
                 value={defaultTone}
                 onChange={(e) => setDefaultTone(e.target.value)}
@@ -245,7 +343,36 @@ export default function NewSettingsPage() {
               </select>
             </div>
             <div>
-              <label className="font-label-md text-label-md text-on-surface-variant block mb-xs">Creativity Level: {creativityLevel}%</label>
+              <div className="flex items-center gap-2 mb-xs">
+                <label className="font-label-md text-label-md text-on-surface-variant">Creativity Level: {creativityLevel}%</label>
+                <div className="relative">
+                  <button
+                    onMouseEnter={() => setShowCreativityTooltip(true)}
+                    onMouseLeave={() => setShowCreativityTooltip(false)}
+                    onClick={() => setShowCreativityTooltip(!showCreativityTooltip)}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                    style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  >
+                    i
+                  </button>
+                  <AnimatePresence>
+                    {showCreativityTooltip && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute left-0 bottom-full mb-2 w-64 p-3 rounded-lg shadow-lg z-50"
+                        style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+                      >
+                        <p className="text-xs" style={{ color: "var(--text-primary)" }}>
+                          <strong>Creativity Level</strong> controls how imaginative the AI gets. Lower values (0-30) produce safe, predictable content. Medium (30-70) balances creativity with professionalism. Higher values (70-100) generate unique, bold content that stands out.
+                        </p>
+                        <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent" style={{ borderTopColor: "var(--border-color)" }} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
               <input
                 type="range"
                 min="0"
@@ -255,6 +382,70 @@ export default function NewSettingsPage() {
                 onBlur={handleSaveAISettings}
                 className="w-full h-2 bg-surface-container-high rounded-full appearance-none cursor-pointer"
               />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Billing Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="glass-card rounded-xl p-lg"
+        >
+          <div className="flex items-center gap-2 mb-6">
+            <h2 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Billing & Subscription</h2>
+            <div className="relative">
+              <button
+                onMouseEnter={() => setShowBillingTooltip(true)}
+                onMouseLeave={() => setShowBillingTooltip(false)}
+                onClick={() => setShowBillingTooltip(!showBillingTooltip)}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+              >
+                i
+              </button>
+              <AnimatePresence>
+                {showBillingTooltip && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute left-0 bottom-full mb-2 w-72 p-3 rounded-lg shadow-lg z-50"
+                    style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+                  >
+                    <p className="text-xs" style={{ color: "var(--text-primary)" }}>
+                      <strong>Billing & Subscription</strong> manages your plan and payment methods. You can upgrade to access more AI generations, additional platform accounts, and priority support. Current plans include Free, Pro ($19/mo), and Business ($49/mo).
+                    </p>
+                    <div className="absolute left-2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent" style={{ borderTopColor: "var(--border-color)" }} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-lg" style={{ background: "var(--bg-hover)" }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Current Plan: Free</p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>100 AI generations per month</p>
+              </div>
+              <button className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}>
+                Upgrade to Pro
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-3 rounded-lg" style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}>
+                <p className="text-2xl font-bold" style={{ color: "#6366f1" }}>47</p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Generations Used</p>
+              </div>
+              <div className="p-3 rounded-lg" style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}>
+                <p className="text-2xl font-bold" style={{ color: "#6366f1" }}>53</p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Remaining</p>
+              </div>
+              <div className="p-3 rounded-lg" style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}>
+                <p className="text-2xl font-bold" style={{ color: "#6366f1" }}>2</p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Connected Accounts</p>
+              </div>
             </div>
           </div>
         </motion.div>
