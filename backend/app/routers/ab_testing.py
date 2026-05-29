@@ -3,6 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -15,9 +16,32 @@ from app.services.ab_testing_service import (
     cancel_ab_test,
 )
 from app.models.user import User
+from app.models.workspace_member import WorkspaceMember
+from app.models.ab_test import ABTest
 from app.core.auth import get_current_user
 
 router = APIRouter()
+
+
+async def check_workspace_auth(db: AsyncSession, workspace_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Verify that the user belongs to the workspace."""
+    result = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Not authorized to access this workspace")
+
+
+async def get_test_and_check_auth(db: AsyncSession, test_id: uuid.UUID, user_id: uuid.UUID) -> ABTest:
+    """Fetch the A/B test and verify workspace authorization."""
+    ab_test = await db.get(ABTest, test_id)
+    if not ab_test:
+        raise HTTPException(status_code=404, detail="AB test not found")
+    await check_workspace_auth(db, ab_test.workspace_id, user_id)
+    return ab_test
 
 
 @router.get("/", response_model=list[dict])
@@ -27,6 +51,7 @@ async def list_tests(
     current_user: User = Depends(get_current_user),
 ):
     """List all A/B tests for a workspace."""
+    await check_workspace_auth(db, workspace_id, current_user.id)
     results = await list_ab_tests(db, str(workspace_id))
     return results
 
@@ -38,6 +63,7 @@ async def create_test(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new A/B test."""
+    await check_workspace_auth(db, body.workspace_id, current_user.id)
     result = await create_ab_test(
         db=db,
         workspace_id=str(body.workspace_id),
@@ -58,9 +84,8 @@ async def get_test(
     current_user: User = Depends(get_current_user),
 ):
     """Get detailed results for an A/B test."""
+    await get_test_and_check_auth(db, test_id, current_user.id)
     result = await get_ab_test_result(db, str(test_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="AB test not found")
     return result
 
 
@@ -71,9 +96,8 @@ async def evaluate_test(
     current_user: User = Depends(get_current_user),
 ):
     """Evaluate an A/B test to determine winner."""
+    await get_test_and_check_auth(db, test_id, current_user.id)
     result = await evaluate_ab_test(db, str(test_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="AB test not found")
     return result
 
 
@@ -84,8 +108,6 @@ async def cancel_test(
     current_user: User = Depends(get_current_user),
 ):
     """Cancel/stop an A/B test."""
-    success = await cancel_ab_test(db, str(test_id))
-    if not success:
-        raise HTTPException(status_code=404, detail="AB test not found")
+    await get_test_and_check_auth(db, test_id, current_user.id)
+    await cancel_ab_test(db, str(test_id))
     return {"status": "success"}
-

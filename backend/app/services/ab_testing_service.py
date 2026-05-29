@@ -21,6 +21,14 @@ def format_ab_test(ab_test: ABTest, var_a: Content, var_b: Content) -> dict:
         else:
             status = "cancelled"
 
+    confidence_score = None
+    if ab_test.result_data and not ab_test.is_active and ab_test.winning_variant:
+        a_score = ab_test.result_data.get("variant_a_score", 0)
+        b_score = ab_test.result_data.get("variant_b_score", 0)
+        total = a_score + b_score
+        if total > 0:
+            confidence_score = round(50.0 + (abs(a_score - b_score) / total) * 50.0, 1)
+
     return {
         "id": str(ab_test.id),
         "workspace_id": str(ab_test.workspace_id),
@@ -32,7 +40,7 @@ def format_ab_test(ab_test: ABTest, var_a: Content, var_b: Content) -> dict:
         "author_id": str(var_a.author_id) if var_a else "",
         "status": status,
         "winner_variant": ab_test.winning_variant,
-        "confidence_score": 95.0 if not ab_test.is_active and ab_test.winning_variant else None,
+        "confidence_score": confidence_score,
         "started_at": ab_test.started_at.isoformat() if ab_test.started_at else None,
         "completed_at": ab_test.ended_at.isoformat() if ab_test.ended_at else None,
         "created_at": ab_test.started_at.isoformat() if ab_test.started_at else None,
@@ -97,10 +105,23 @@ async def list_ab_tests(db: AsyncSession, workspace_id: str) -> list[dict]:
     )
     ab_tests = result.scalars().all()
 
+    # Batch load all variant contents to prevent N+1 queries
+    content_ids = []
+    for test in ab_tests:
+        content_ids.extend([test.variant_a_content_id, test.variant_b_content_id])
+
+    contents_dict = {}
+    if content_ids:
+        content_result = await db.execute(
+            select(Content).where(Content.id.in_(content_ids))
+        )
+        for content in content_result.scalars().all():
+            contents_dict[content.id] = content
+
     formatted_tests = []
     for test in ab_tests:
-        var_a = await db.get(Content, test.variant_a_content_id)
-        var_b = await db.get(Content, test.variant_b_content_id)
+        var_a = contents_dict.get(test.variant_a_content_id)
+        var_b = contents_dict.get(test.variant_b_content_id)
         formatted_tests.append(format_ab_test(test, var_a, var_b))
 
     return formatted_tests
@@ -144,6 +165,8 @@ async def get_ab_test_result(db: AsyncSession, test_id: str) -> dict | None:
             recommendation = "Variant A performs significantly better. We recommend publishing Variant A."
         elif ab_test.winning_variant == "B":
             recommendation = "Variant B performs significantly better. We recommend publishing Variant B."
+        elif formatted_test["status"] == "cancelled":
+            recommendation = "This test was cancelled by the user before completion."
         else:
             recommendation = "The test ended in a tie. You can use either variant."
 

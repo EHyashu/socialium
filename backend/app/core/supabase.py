@@ -99,6 +99,20 @@ async def supabase_sign_up(email: str, password: str) -> dict | None:
                 return sign_in_result
             # Fallback: return user data without tokens
             return user_data
+        elif response.status_code in (400, 422):
+            try:
+                error_data = response.json()
+                if error_data.get("error_code") == "email_exists":
+                    logger.info(f"User {email} already exists in Supabase. Attempting sign-in.")
+                    # 1. Try to sign in with the password provided
+                    sign_in_result = await supabase_sign_in(email, password)
+                    if sign_in_result:
+                        logger.info(f"User {email} signed in successfully via signup fallback.")
+                        return sign_in_result
+            except Exception as e:
+                logger.error(f"Error handling existing user signup fallback for {email}: {e}", exc_info=True)
+            
+            logger.error(f"Supabase signup failed for {email}: {response.status_code} - {response.text}")
         else:
             logger.error(f"Supabase signup failed for {email}: {response.status_code} - {response.text}")
         return None
@@ -153,3 +167,49 @@ async def supabase_exchange_code_for_token(code: str, code_verifier: str) -> dic
         if response.status_code == 200:
             return response.json()
         return None
+
+
+async def supabase_recover_password(email: str) -> bool:
+    """Send a password recovery/reset email to the user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # We pass the redirectTo parameter so they are sent back to the reset-password page
+    redirect_to = f"{settings.frontend_url}/reset-password" if hasattr(settings, 'frontend_url') else "http://localhost:3000/reset-password"
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{settings.supabase_url}/auth/v1/recover",
+            headers={
+                "apikey": settings.supabase_anon_key,
+                "Content-Type": "application/json",
+            },
+            json={"email": email},
+            params={"redirectTo": redirect_to}
+        )
+        if response.status_code == 200:
+            logger.info(f"Password recovery email sent successfully to: {email}")
+            return True
+        else:
+            logger.error(f"Supabase recover password failed for {email}: {response.status_code} - {response.text}")
+            return False
+
+
+async def supabase_update_password(user_id: str, new_password: str) -> bool:
+    """Update a user's password using the admin API."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    headers = get_supabase_headers()
+    async with httpx.AsyncClient() as client:
+        response = await client.put(
+            f"{settings.supabase_url}/auth/v1/admin/users/{user_id}",
+            headers=headers,
+            json={"password": new_password},
+        )
+        if response.status_code == 200:
+            logger.info(f"Password updated successfully for user ID: {user_id}")
+            return True
+        else:
+            logger.error(f"Supabase password update failed for user {user_id}: {response.status_code} - {response.text}")
+            return False

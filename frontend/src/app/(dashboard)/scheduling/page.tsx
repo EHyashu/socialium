@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Calendar, Clock, Zap, RefreshCw, CheckCircle, BarChart3 } from "lucide-react";
 import { listContent, autoScheduleContent, getOptimalTime, bulkAutoSchedule, scheduleContentManually } from "@/services/content";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import type { Content } from "@/types";
 import { capitalize } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -44,7 +44,7 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 
 export default function SchedulingPage() {
   const router = useRouter();
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [activeTab, setActiveTab] = useState<"ready" | "scheduled">("ready");
   const [readyContent, setReadyContent] = useState<Content[]>([]);
   const [scheduledContent, setScheduledContent] = useState<Content[]>([]);
@@ -57,12 +57,31 @@ export default function SchedulingPage() {
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    loadContent();
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace()
+        .then(fetched => {
+          if (fetched) {
+            setWorkspaceId(fetched);
+            loadContent(fetched);
+          } else {
+            setLoading(false);
+          }
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    } else {
+      setWorkspaceId(id);
+      loadContent(id);
+    }
   }, []);
 
-  const loadContent = async () => {
+  const loadContent = async (wsId?: string) => {
+    const targetId = wsId || workspaceId;
+    if (!targetId) return;
     try {
-      const allContent = await listContent(workspaceId);
+      const allContent = await listContent(targetId);
       setReadyContent(allContent.filter(c => c.status === "draft" || c.status === "approved"));
       setScheduledContent(allContent.filter(c => c.status === "scheduled"));
     } catch {
@@ -73,18 +92,24 @@ export default function SchedulingPage() {
   };
 
   const handleAnalyze = async (content: Content) => {
+    // Don't re-analyze if this content is already selected
+    if (selectedContent?.id === content.id) return;
+
     setSelectedContent(content);
     setAnalyzing(true);
     setOptimalTime(null);
     setViralScore(null);
 
+    // Dismiss any existing toasts before showing a new one
+    toast.dismiss();
+
     try {
       const result = await getOptimalTime(content.id);
       setViralScore(result.viral_score);
       setOptimalTime(result.optimal_time);
-      toast.success("AI analysis complete!");
+      toast.success("AI analysis complete!", { id: "analyze-result" });
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to analyze");
+      toast.error(error?.response?.data?.detail || "Failed to analyze", { id: "analyze-error" });
     } finally {
       setAnalyzing(false);
     }
@@ -92,6 +117,8 @@ export default function SchedulingPage() {
 
   const handleAutoSchedule = async (content: Content) => {
     setScheduling(content.id);
+    // Dismiss any existing toasts before showing schedule result
+    toast.dismiss();
     try {
       const result = await autoScheduleContent(content.id);
       setSelectedContent(content);
@@ -99,7 +126,7 @@ export default function SchedulingPage() {
       setOptimalTime(result.optimal_times);
       
       if (result.decision.action === "auto_scheduled") {
-        toast.success(`✅ Auto-scheduled!`);
+        toast.success(`✅ Auto-scheduled!`, { id: "schedule-result" });
         setTimeout(() => {
           loadContent();
           setSelectedContent(null);
@@ -107,37 +134,18 @@ export default function SchedulingPage() {
           setOptimalTime(null);
         }, 2000);
       } else {
-        toast(result.decision.reason, { icon: "ℹ️" });
+        // Show single toast with unique ID so it never stacks
+        toast(result.decision.reason, { icon: "ℹ️", id: "schedule-info", duration: 5000 });
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to schedule");
+      toast.error(error?.response?.data?.detail || "Failed to schedule", { id: "schedule-error" });
     } finally {
       setScheduling(null);
     }
   };
 
-  const handleConfirmSchedule = async () => {
-    if (!selectedContent || !optimalTime) return;
-    
-    setScheduling(selectedContent.id);
-    try {
-      await scheduleContentManually(selectedContent.id, optimalTime.best_slot.scheduled_at);
-      toast.success("✅ Content scheduled successfully!");
-      setTimeout(() => {
-        loadContent();
-        setSelectedContent(null);
-        setViralScore(null);
-        setOptimalTime(null);
-      }, 2000);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to schedule");
-    } finally {
-      setScheduling(null);
-    }
-  };
-
-  const handleScheduleAtTime = async (scheduledAt: string) => {
-    if (!selectedContent) return;
+  const executeSchedule = async (scheduledAt: string) => {
+    if (!selectedContent || scheduling) return;
     
     setScheduling(selectedContent.id);
     try {
@@ -154,6 +162,16 @@ export default function SchedulingPage() {
     } finally {
       setScheduling(null);
     }
+  };
+
+  const handleConfirmSchedule = () => {
+    if (optimalTime?.best_slot?.scheduled_at) {
+      executeSchedule(optimalTime.best_slot.scheduled_at);
+    }
+  };
+
+  const handleScheduleAtTime = (scheduledAt: string) => {
+    executeSchedule(scheduledAt);
   };
 
   const handleBulkSchedule = async () => {
@@ -327,8 +345,12 @@ export default function SchedulingPage() {
                         {optimalTime.alternative_slots.slice(0, 2).map((slot, i) => (
                           <div 
                             key={i} 
-                            onClick={() => handleScheduleAtTime(slot.scheduled_at)}
-                            className="flex justify-between p-3 rounded-lg cursor-pointer hover:bg-indigo-600/10 border border-transparent hover:border-indigo-500/20 transition-all active:scale-[0.99]"
+                            onClick={() => !scheduling && handleScheduleAtTime(slot.scheduled_at)}
+                            className={`flex justify-between p-3 rounded-lg border transition-all ${
+                              scheduling 
+                                ? "opacity-50 cursor-not-allowed border-transparent" 
+                                : "cursor-pointer hover:bg-indigo-600/10 border-transparent hover:border-indigo-500/20 active:scale-[0.99]"
+                            }`}
                             style={{ background: "var(--bg-hover)" }}
                           >
                             <span style={{ color: "var(--text-primary)" }}>{formatTimeSlot(slot.day_of_week, slot.hour)}</span>
@@ -343,7 +365,7 @@ export default function SchedulingPage() {
                 {/* Action */}
                 <button
                   onClick={handleConfirmSchedule}
-                  disabled={scheduling === selectedContent.id}
+                  disabled={!!scheduling}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all"
                 >
                   {scheduling === selectedContent.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}

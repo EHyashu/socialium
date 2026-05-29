@@ -1,107 +1,79 @@
-# CodeRabbit AI Code Review Configuration
-# Documentation: https://docs.coderabbit.ai
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 
 # General Settings
-language: en-US
-tone: friendly
-review_style: detailed
+language: "en-US"
+tone_instructions: "Keep the review tone friendly, constructive, and helpful."
 
-# Focus areas for Socialium project
-focus_areas:
-  - security
-  - performance
-  - best_practices
-  - typescript
-  - python
-  - error_handling
+reviews:
+  profile: "chill"
+  
+  # File patterns to exclude from reviews
+  path_filters:
+    - "!node_modules/**"
+    - "!**/__pycache__/**"
+    - "!**/*.pyc"
+    - "!.next/**"
+    - "!**/*.db"
+    - "!**/*.sqlite"
+    - "!**/*.sqlite3"
+    - "!.env"
+    - "!.env.*"
+    - "!**/*.lock"
+    - "!package-lock.json"
 
-# File patterns to ignore
-ignore:
-  - "node_modules/**"
-  - "__pycache__/**"
-  - "*.pyc"
-  - ".next/**"
-  - "*.db"
-  - "*.sqlite"
-  - "*.sqlite3"
-  - ".env"
-  - ".env.*"
-  - "*.lock"
-  - "package-lock.json"
+  # Path-specific guidelines and instructions
+  path_instructions:
+    # General instructions for all files
+    - path: "**/*"
+      instructions: |
+        - Always check for exposed secrets, API keys, or credentials in code.
+        - Ensure all environment variables are properly loaded from .env files.
+        - Validate that authentication/authorization is implemented in all protected routes.
+        - Check for proper CORS configuration with specific origins.
+        - Ensure database queries use parameterized statements (no SQL injection).
+        - Validate that API endpoints follow RESTful conventions.
+        - Check that request/response schemas are properly defined.
+        - Ensure proper validation of user inputs.
+        - Verify pagination is implemented for list endpoints.
+        - Suggest extracting complex logic into separate functions/services.
+        - Check for code duplication and suggest refactoring.
+        - Validate consistent naming conventions (snake_case for Python, camelCase for TypeScript).
+        - Ensure proper logging for debugging and monitoring.
+        - Check for N+1 query problems in database operations.
+        - Suggest caching strategies for frequently accessed data.
+        - Validate that large datasets use pagination.
+        - Check for unnecessary re-renders in React components.
 
-# Custom review instructions for Socialium
-instructions:
-  # Security
-  - "Always check for exposed secrets, API keys, or credentials in code"
-  - "Ensure all environment variables are properly loaded from .env files"
-  - "Validate that authentication/authorization is implemented in all protected routes"
-  - "Check for proper CORS configuration with specific origins"
-  - "Ensure database queries use parameterized statements (no SQL injection)"
-  
-  # Python/FastAPI
-  - "Verify async/await usage is consistent throughout FastAPI routes"
-  - "Check that all Pydantic models have proper type annotations"
-  - "Ensure dependency injection follows FastAPI patterns (Depends)"
-  - "Validate error handling with proper HTTP status codes"
-  - "Check that database sessions are properly managed with async context"
-  
-  # TypeScript/Next.js
-  - "Ensure all React hooks follow Rules of Hooks"
-  - "Check for proper TypeScript type definitions (no 'any' types)"
-  - "Validate that API calls have proper error handling with try-catch"
-  - "Ensure React Query is used for server state management"
-  - "Check for proper loading states and error boundaries"
-  
-  # API Design
-  - "Validate that API endpoints follow RESTful conventions"
-  - "Check that request/response schemas are properly defined"
-  - "Ensure proper validation of user inputs"
-  - "Verify pagination is implemented for list endpoints"
-  
-  # Database
-  - "Check that SQLAlchemy models have proper relationships defined"
-  - "Ensure indexes are added for frequently queried fields"
-  - "Validate that migrations are created for schema changes"
-  
-  # Code Quality
-  - "Suggest extracting complex logic into separate functions/services"
-  - "Check for code duplication and suggest refactoring"
-  - "Validate consistent naming conventions (snake_case for Python, camelCase for TypeScript)"
-  - "Ensure proper logging for debugging and monitoring"
-  
-  # Performance
-  - "Check for N+1 query problems in database operations"
-  - "Suggest caching strategies for frequently accessed data"
-  - "Validate that large datasets use pagination"
-  - "Check for unnecessary re-renders in React components"
+    # Python/FastAPI specific instructions
+    - path: "backend/**/*.py"
+      instructions: |
+        - Follow PEP 8 style guide for Python code.
+        - Ensure all FastAPI routers have proper OpenAPI documentation.
+        - Check that OAuth flows use PKCE for security.
+        - Verify async/await usage is consistent throughout FastAPI routes.
+        - Check that all Pydantic models have proper type annotations.
+        - Ensure dependency injection follows FastAPI patterns (Depends).
+        - Validate error handling with proper HTTP status codes.
+        - Check that database sessions are properly managed with async context.
+        - Check that SQLAlchemy models have proper relationships defined.
+        - Ensure indexes are added for frequently queried fields.
+        - Validate that migrations are created for schema changes.
 
-# Path-specific configurations
-path_instructions:
-  - path: "backend/**/*.py"
-    instructions:
-      - "Follow PEP 8 style guide for Python code"
-      - "Ensure all FastAPI routers have proper OpenAPI documentation"
-      - "Check that OAuth flows use PKCE for security"
-  
-  - path: "frontend/**/*.ts"
-    instructions:
-      - "Follow TypeScript strict mode guidelines"
-      - "Ensure all components are properly typed"
-      - "Check for proper error boundaries in React components"
-  
-  - path: "frontend/src/app/**/*.tsx"
-    instructions:
-      - "Ensure Next.js App Router best practices are followed"
-      - "Check for proper client/server component separation"
-      - "Validate that SSR/SSG is used appropriately"
+    # TypeScript specific instructions
+    - path: "frontend/**/*.ts"
+      instructions: |
+        - Follow TypeScript strict mode guidelines.
+        - Ensure all components are properly typed.
+        - Check for proper error boundaries in React components.
+        - Ensure all React hooks follow Rules of Hooks.
+        - Check for proper TypeScript type definitions (no 'any' types).
+        - Validate that API calls have proper error handling with try-catch.
+        - Ensure React Query is used for server state management.
+        - Check for proper loading states and error boundaries.
 
-# Review settings
-chat:
-  auto_reply: true
-  response_style: conversational
-
-# Auto-review triggers
-triggers:
-  - pull_request
-  - pull_request_review_comment
-  - issue_comment
+    # Next.js App Router specific instructions
+    - path: "frontend/src/app/**/*.tsx"
+      instructions: |
+        - Ensure Next.js App Router best practices are followed.
+        - Check for proper client/server component separation.
+        - Validate that SSR/SSG is used appropriately.

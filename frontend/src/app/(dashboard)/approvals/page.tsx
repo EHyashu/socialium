@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle, XCircle, Edit3, MessageCircle, Eye } from "lucide-react";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { listContent } from "@/services/content";
 import { listApprovals, submitApproval } from "@/services/approvals";
 import type { Content } from "@/types";
@@ -16,7 +16,7 @@ interface ContentItem extends Content {
 }
 
 export default function ApprovalsPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [pendingContent, setPendingContent] = useState<ContentItem[]>([]);
@@ -27,14 +27,29 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     setMounted(true);
-    loadData();
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) {
+          setWorkspaceId(fetched);
+          loadData(fetched);
+        } else {
+          setLoading(false);
+        }
+      });
+    } else {
+      setWorkspaceId(id);
+      loadData(id);
+    }
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (wsId?: string) => {
+    const targetId = wsId || workspaceId;
+    if (!targetId) return;
     try {
       const [approvalsData, contentData] = await Promise.all([
-        listApprovals(workspaceId),
-        listContent(workspaceId, "pending_approval"),
+        listApprovals(targetId),
+        listContent(targetId, "pending_approval"),
       ]);
 
       setApprovals(approvalsData);

@@ -19,9 +19,7 @@ class PlatformAccount(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id"), nullable=False, index=True
     )
-    platform: Mapped[Platform] = mapped_column(
-        Enum(Platform, name="platform_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
-    )
+    platform: Mapped[Platform] = mapped_column(Enum(Platform, name="platform_enum", values_callable=lambda x: [e.value for e in x]), nullable=False)
     platform_user_id: Mapped[str] = mapped_column(String(200), nullable=False)
     platform_username: Mapped[str | None] = mapped_column(String(200))
     access_token: Mapped[str] = mapped_column(Text, nullable=False)

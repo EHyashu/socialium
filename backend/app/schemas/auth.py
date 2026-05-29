@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class SignUpRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=6, max_length=128)
     username: str = Field(min_length=3, max_length=100)
     full_name: str | None = None
 
@@ -56,3 +56,11 @@ class PhoneOTPRequest(BaseModel):
 class PhoneOTPVerifyRequest(BaseModel):
     phone_number: str
     otp: str
+
+
+class RecoverPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=128)

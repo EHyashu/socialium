@@ -351,8 +351,8 @@ class AudienceActivityService:
             # Use the contents table (which is what we actually have)
             query = text("""
                 SELECT
-                    CAST(strftime('%w', published_at) AS INTEGER) AS day_of_week,
-                    CAST(strftime('%H', published_at) AS INTEGER) AS hour,
+                    CAST(EXTRACT(ISODOW FROM published_at) AS INTEGER) - 1 AS day_of_week,
+                    CAST(EXTRACT(HOUR FROM published_at) AS INTEGER) AS hour,
                     AVG(engagement_count) AS avg_engagement,
                     AVG(like_count + comment_count * 3 + share_count * 5) AS avg_viral_score,
                     COUNT(*) AS post_count
@@ -360,7 +360,7 @@ class AudienceActivityService:
                 WHERE workspace_id = :workspace_id
                   AND platform = :platform
                   AND published_at IS NOT NULL
-                  AND published_at >= datetime('now', '-90 days')
+                  AND published_at >= NOW() - INTERVAL '90 days'
                   AND status = 'published'
                 GROUP BY day_of_week, hour
                 HAVING COUNT(*) >= 1
@@ -434,13 +434,13 @@ class AudienceActivityService:
         try:
             query = text("""
                 SELECT
-                    CAST(strftime('%w', published_at) AS INTEGER) AS day,
+                    CAST(EXTRACT(ISODOW FROM published_at) AS INTEGER) - 1 AS day,
                     AVG(engagement_count) AS avg_rate
                 FROM contents
                 WHERE workspace_id = :workspace_id
                   AND platform = :platform
                   AND published_at IS NOT NULL
-                  AND published_at >= datetime('now', '-90 days')
+                  AND published_at >= NOW() - INTERVAL '90 days'
                 GROUP BY day
             """)
             result = await db.execute(query, {

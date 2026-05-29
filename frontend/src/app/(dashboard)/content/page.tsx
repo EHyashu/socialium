@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Sparkles, Trash2, Eye, Send, Zap, Calendar, Clock } from "lucide-react";
 import { listContent, deleteContent, submitForApproval } from "@/services/content";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import type { Content } from "@/types";
 import { formatDate, capitalize } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -12,14 +12,33 @@ import Link from "next/link";
 import { useUIStore } from "@/store/use-ui-store";
 
 export default function ContentPage() {
-  const workspaceId = requireWorkspaceId();
   const { confirm } = useUIStore();
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [ready, setReady] = useState(false);
   const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [publishing, setPublishing] = useState<string | null>(null);
 
+  useEffect(() => {
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) {
+          setWorkspaceId(fetched);
+          setReady(true);
+        } else {
+          setLoading(false);
+        }
+      });
+    } else {
+      setWorkspaceId(id);
+      setReady(true);
+    }
+  }, []);
+
   const load = async () => {
+    if (!workspaceId) return;
     setLoading(true);
     try {
       // Pass status filter to API (convert "all" to undefined)
@@ -34,8 +53,10 @@ export default function ContentPage() {
   };
 
   useEffect(() => {
-    load();
-  }, [statusFilter, workspaceId]);
+    if (ready) {
+      load();
+    }
+  }, [statusFilter, workspaceId, ready]);
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirm("Delete this content?");
