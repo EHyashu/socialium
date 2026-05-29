@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.services.analytics_service import get_analytics_summary
+from app.core.auth import get_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -14,6 +16,7 @@ async def get_analytics_overview(
     workspace_id: str = Query(...),
     days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get analytics overview for dashboard."""
     import uuid as uuid_mod
@@ -46,6 +49,7 @@ async def get_analytics(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get analytics data."""
     from datetime import date

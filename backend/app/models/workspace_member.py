@@ -23,7 +23,7 @@ class WorkspaceMember(Base):
         Uuid, ForeignKey("users.id"), nullable=False, index=True
     )
     role: Mapped[WorkspaceRole] = mapped_column(
-        Enum(WorkspaceRole), default=WorkspaceRole.EDITOR
+        Enum(WorkspaceRole, name="workspace_role", values_callable=lambda x: [e.value for e in x]), default=WorkspaceRole.EDITOR
     )
     invited_email: Mapped[str | None] = mapped_column(String(320))
     joined_at: Mapped[datetime] = mapped_column(

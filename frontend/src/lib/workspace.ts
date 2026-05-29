@@ -29,11 +29,22 @@ export function getWorkspaceId(): string | null {
 
 export function requireWorkspaceId(): string {
   const id = getWorkspaceId();
-  if (!id) {
-    // Fallback to demo workspace for development
-    return "00000000-0000-0000-0000-000000000000";
+  return id || "";
+}
+
+export async function fetchAndStoreWorkspace(): Promise<string | null> {
+  try {
+    const api = (await import("@/lib/api")).default;
+    const res = await api.get("/workspaces");
+    const workspaces = res.data;
+    if (workspaces && workspaces.length > 0) {
+      setCurrentWorkspace(workspaces[0]);
+      return workspaces[0].id;
+    }
+    return null;
+  } catch {
+    return null;
   }
-  return id;
 }
 
 export function clearWorkspace(): void {

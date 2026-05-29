@@ -22,7 +22,7 @@ class Approval(Base):
     reviewer_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id"), nullable=False
     )
-    action: Mapped[ApprovalAction] = mapped_column(Enum(ApprovalAction), nullable=False)
+    action: Mapped[ApprovalAction] = mapped_column(Enum(ApprovalAction, name="approval_action", values_callable=lambda x: [e.value for e in x]), nullable=False)
     comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

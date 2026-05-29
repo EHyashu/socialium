@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { getAnalyticsOverview } from "@/services/analytics";
 import toast from "react-hot-toast";
 
@@ -16,7 +16,7 @@ interface PlatformData {
 }
 
 export default function NewAnalyticsPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<any>(null);
@@ -24,6 +24,14 @@ export default function NewAnalyticsPage() {
 
   useEffect(() => {
     setMounted(true);
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) setWorkspaceId(fetched);
+      });
+    } else {
+      setWorkspaceId(id);
+    }
   }, []);
 
   useEffect(() => {

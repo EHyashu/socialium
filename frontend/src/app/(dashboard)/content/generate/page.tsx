@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { getWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { generateContent, createContent, submitForApproval } from "@/services/content";
 import toast from "react-hot-toast";
 
 export default function NewContentGeneratorPage() {
   const router = useRouter();
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState<string>("");
   const [mounted, setMounted] = useState(false);
   const [topic, setTopic] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["linkedin", "twitter"]);
@@ -28,9 +28,22 @@ export default function NewContentGeneratorPage() {
 
   useEffect(() => {
     setMounted(true);
+    const { getWorkspaceId, fetchAndStoreWorkspace } = require("@/lib/workspace");
+    const id = getWorkspaceId();
+    if (id) {
+      setWorkspaceId(id);
+    } else {
+      fetchAndStoreWorkspace().then((fetchedId: string | null) => {
+        if (fetchedId) setWorkspaceId(fetchedId);
+      });
+    }
   }, []);
 
   const handleGenerate = async () => {
+    if (!workspaceId) {
+      toast.error("Workspace is still loading, please wait.");
+      return;
+    }
     if (!topic.trim()) {
       toast.error("Please enter a topic");
       return;
@@ -58,8 +71,11 @@ export default function NewContentGeneratorPage() {
       
       toast.success("Content generated!");
     } catch (error: any) {
-      const errorMsg = error?.response?.data?.detail || "Failed to generate content";
-      toast.error(errorMsg);
+      let errorMsg = error?.response?.data?.detail || "Failed to generate content";
+      if (Array.isArray(errorMsg)) {
+        errorMsg = errorMsg.map((err: any) => `${err.loc?.join(".")}: ${err.msg}`).join(", ");
+      }
+      toast.error(typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg));
     } finally {
       setGenerating(false);
     }
@@ -87,10 +103,58 @@ export default function NewContentGeneratorPage() {
       toast.success("Draft saved!");
       router.push(`/content/${saved.id}`);
     } catch (error: any) {
-      const errorMsg = error?.response?.data?.detail || "Failed to save draft";
-      toast.error(errorMsg);
+      let errorMsg = error?.response?.data?.detail || "Failed to save draft";
+      if (Array.isArray(errorMsg)) {
+        errorMsg = errorMsg.map((err: any) => `${err.loc?.join(".")}: ${err.msg}`).join(", ");
+      }
+      toast.error(typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAllPlatforms = async () => {
+    if (!generatedContent?.results) {
+      toast.error("No content to save");
+      return;
+    }
+
+    const platforms = Object.keys(generatedContent.results).filter(
+      (p) => generatedContent.results[p]?.success
+    );
+
+    if (platforms.length === 0) {
+      toast.error("No successful platforms to save");
+      return;
+    }
+
+    setSaving(true);
+    let saved = 0;
+    let failed = 0;
+
+    for (const platform of platforms) {
+      const content = generatedContent.results[platform];
+      try {
+        await createContent({
+          workspace_id: workspaceId,
+          platform: platform as any,
+          tone: tone as any,
+          title: content.title,
+          body: content.body,
+          hashtags: content.hashtags,
+        });
+        saved++;
+      } catch {
+        failed++;
+      }
+    }
+
+    setSaving(false);
+    if (failed === 0) {
+      toast.success(`✅ Saved ${saved} platform${saved > 1 ? "s" : ""} as drafts!`);
+      router.push("/content");
+    } else {
+      toast.success(`Saved ${saved}, failed ${failed}`);
     }
   };
 
@@ -125,8 +189,11 @@ export default function NewContentGeneratorPage() {
       
       router.push("/approvals");
     } catch (error: any) {
-      const errorMsg = error?.response?.data?.detail || "Failed to submit for approval";
-      toast.error(errorMsg);
+      let errorMsg = error?.response?.data?.detail || "Failed to submit for approval";
+      if (Array.isArray(errorMsg)) {
+        errorMsg = errorMsg.map((err: any) => `${err.loc?.join(".")}: ${err.msg}`).join(", ");
+      }
+      toast.error(typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg));
     } finally {
       setSaving(false);
     }
@@ -416,26 +483,40 @@ export default function NewContentGeneratorPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 mt-2">
+              <div className="flex gap-3 mt-2 flex-wrap">
                 <button
                   onClick={handleSaveDraft}
                   disabled={saving}
-                  className="flex-1 rounded-lg py-3 px-4 font-medium border hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 min-w-[140px] rounded-lg py-3 px-4 font-medium border hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ borderColor: "var(--border-color)", color: "var(--text-primary)", background: "var(--bg-card)" }}
                 >
                   <span className="material-symbols-outlined text-sm">{saving ? "progress_activity" : "save"}</span>
-                  {saving ? "Saving..." : "Save as Draft"}
+                  {saving ? "Saving..." : "Save Draft"}
                 </button>
+
+                {/* Show "Save All" only when multiple platforms generated */}
+                {generatedContent?.platforms && generatedContent.platforms.length > 1 && (
+                  <button
+                    onClick={handleSaveAllPlatforms}
+                    disabled={saving}
+                    className="flex-1 min-w-[140px] rounded-lg py-3 px-4 font-medium border hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    style={{ borderColor: "#6366f1", color: "#6366f1", background: "rgba(99,102,241,0.08)" }}
+                  >
+                    <span className="material-symbols-outlined text-sm">save_all</span>
+                    {saving ? "Saving..." : `Save All (${generatedContent.platforms.length})`}
+                  </button>
+                )}
                 
                 <button
                   onClick={handleSubmitForApproval}
                   disabled={saving}
-                  className="flex-1 rounded-lg py-3 px-4 font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 min-w-[140px] rounded-lg py-3 px-4 font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-sm">{saving ? "progress_activity" : "send"}</span>
                   {saving ? "Submitting..." : "Submit for Approval"}
                 </button>
               </div>
+
 
               {/* Platform Tabs */}
               {generatedContent.platforms && generatedContent.platforms.length > 1 && (

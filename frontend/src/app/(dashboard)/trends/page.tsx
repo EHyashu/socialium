@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, Hash, BarChart3, ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
+import api from "@/lib/api";
 
 interface Trend {
   id: string;
@@ -15,7 +16,7 @@ interface Trend {
 }
 
 export default function TrendsPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [trends, setTrends] = useState<Trend[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
@@ -25,25 +26,26 @@ export default function TrendsPage() {
 
   useEffect(() => {
     setMounted(true);
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) setWorkspaceId(fetched);
+      });
+    } else {
+      setWorkspaceId(id);
+    }
     loadData();
   }, []);
 
   const loadData = async () => {
     try {
       const [trendsRes, keywordsRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/trends`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/trends/keywords?industry=${selectedIndustry}&count=15`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        }),
+        api.get("/trends"),
+        api.get(`/trends/keywords?industry=${selectedIndustry}&count=15`),
       ]);
 
-      const trendsData = await trendsRes.json();
-      const keywordsData = await keywordsRes.json();
-
-      setTrends(trendsData.trends || []);
-      setKeywords(keywordsData.keywords || []);
+      setTrends(trendsRes.data.trends || []);
+      setKeywords(keywordsRes.data.keywords || []);
     } catch (error) {
       console.error("Failed to load trends:", error);
     } finally {

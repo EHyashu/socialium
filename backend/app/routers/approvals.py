@@ -23,6 +23,7 @@ router = APIRouter()
 async def list_approvals(
     workspace_id: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """List content awaiting approval."""
     query = (
