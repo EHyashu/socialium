@@ -22,7 +22,7 @@ class User(Base):
     phone_number: Mapped[str | None] = mapped_column(String(20), index=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500))
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
-        Enum(SubscriptionTier), default=SubscriptionTier.FREE
+        Enum(SubscriptionTier, name="subscription_tier", values_callable=lambda x: [e.value for e in x]), default=SubscriptionTier.FREE
     )
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(

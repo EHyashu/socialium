@@ -101,11 +101,15 @@ async def schedule_content(
     content_id: uuid.UUID,
     scheduled_at: datetime,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Schedule content for publishing."""
     content = await db.get(Content, content_id)
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
+
+    if content.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to schedule this content")
 
     content.scheduled_at = scheduled_at
     content.status = ContentStatus.SCHEDULED
@@ -114,11 +118,18 @@ async def schedule_content(
 
 
 @router.post("/{content_id}/publish-now")
-async def publish_now(content_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def publish_now(
+    content_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Publish content immediately."""
     content = await db.get(Content, content_id)
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
+
+    if content.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to publish this content")
 
     content.status = ContentStatus.PUBLISHED
     content.published_at = datetime.utcnow()

@@ -33,6 +33,130 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+
+@router.post("/generate")
+async def generate_ai_content(
+    body: ContentGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate content for multiple platforms using AI (rate-limited per workspace).
+
+    Supports multi-platform simultaneous generation, trend boost injection,
+    A/B variant generation, and per-platform quality scoring.
+    """
+    logger.info(f"Generation request: platforms={[p.value for p in body.get_platforms()]}, "
+                f"tone={body.tone.value}, creativity={body.creativity}, "
+                f"trend_boost={body.trend_boost}, variants={body.generate_variants}")
+
+    try:
+        # Enforce per-workspace daily generation budget
+        platforms = body.get_platforms()
+        workspace_id_str = str(body.workspace_id)
+        allowed, current, limit = await check_generation_limit(
+            workspace_id=workspace_id_str,
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily AI generation limit reached ({current}/{limit}). Upgrade your plan for more.",
+            )
+
+        # Separate trend keywords from regular keywords
+        effective_keywords = list(body.keywords or [])
+        trend_kws = list(body.trend_keywords or []) if body.trend_boost else []
+
+        # Determine effective topic from source
+        topic = body.topic
+        if not topic and body.source_text:
+            topic = body.source_text[:500]
+        if not topic and body.source_url:
+            topic = f"Content about: {body.source_url}"
+
+        if not topic:
+            raise HTTPException(status_code=400, detail="Please provide a topic, source text, or URL.")
+
+        results = {}
+        for platform in platforms:
+            result = await generate_content(
+                platform=platform,
+                tone=body.tone,
+                topic=topic,
+                keywords=effective_keywords or None,
+                include_hashtags=body.include_hashtags,
+                include_mentions=body.include_mentions,
+                target_audience=body.target_audience,
+                include_emojis=body.include_emojis,
+                workspace_id=workspace_id_str,
+                trending_keywords=trend_kws or None,
+                content_length=body.content_length,
+                creativity=body.creativity,
+            )
+            if result.get("success"):
+                # Score quality with enhanced factors
+                score_result = await score_content_quality(
+                    body=result.get("body", ""),
+                    platform=platform,
+                    tone=body.tone,
+                    trending_keywords=trend_kws or None,
+                    target_audience=body.target_audience,
+                )
+                result["quality_score"] = int(score_result.get("overall", 7))
+                result["quality_details"] = score_result
+            else:
+                # If generation failed for this platform, still include it with error
+                logger.warning(f"Generation failed for {platform.value}: {result.get('error')}")
+            results[platform.value] = result
+
+            # Generate variant if requested (different angle, higher temperature)
+            if body.generate_variants and result.get("success"):
+                variant = await generate_content(
+                    platform=platform,
+                    tone=body.tone,
+                    topic=topic,
+                    keywords=effective_keywords or None,
+                    include_hashtags=body.include_hashtags,
+                    include_mentions=body.include_mentions,
+                    target_audience=body.target_audience,
+                    include_emojis=body.include_emojis,
+                    workspace_id=workspace_id_str,
+                    trending_keywords=trend_kws or None,
+                    content_length=body.content_length,
+                    creativity=min(body.creativity + 20, 100),
+                )
+                results[f"{platform.value}_variant"] = variant
+
+        # Count as one generation regardless of platform count
+        await increment_generation_count(workspace_id=workspace_id_str)
+        return {
+            "results": results,
+            "platforms": [p.value for p in platforms],
+            "usage": {"used": current + 1, "limit": limit},
+        }
+
+    except HTTPException:
+        raise  # Re-raise FastAPI HTTP exceptions as-is
+    except openai.AuthenticationError:
+        logger.error("OpenAI authentication failed — check OPENAI_API_KEY")
+        raise HTTPException(
+            status_code=500,
+            detail="AI service configuration error. Please verify your OpenAI API key.",
+        )
+    except openai.RateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="AI service rate limited. Please try again in 30 seconds.",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Generation failed unexpectedly: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Content generation failed: {str(e)}",
+        )
+
+
 @router.post("/", response_model=ContentResponse, status_code=201)
 async def create_content(
     body: ContentCreate,
@@ -138,133 +262,24 @@ async def delete_content(
     await db.commit()
 
 
-@router.post("/generate")
-async def generate_ai_content(body: ContentGenerateRequest):
-    """Generate content for multiple platforms using AI (rate-limited per workspace).
 
-    Supports multi-platform simultaneous generation, trend boost injection,
-    A/B variant generation, and per-platform quality scoring.
-    """
-    logger.info(f"Generation request: platforms={[p.value for p in body.get_platforms()]}, "
-                f"tone={body.tone.value}, creativity={body.creativity}, "
-                f"trend_boost={body.trend_boost}, variants={body.generate_variants}")
-
-    try:
-        # Enforce per-workspace daily generation budget
-        platforms = body.get_platforms()
-        workspace_id_str = str(body.workspace_id)
-        allowed, current, limit = await check_generation_limit(
-            workspace_id=workspace_id_str,
-        )
-        if not allowed:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Daily AI generation limit reached ({current}/{limit}). Upgrade your plan for more.",
-            )
-
-        # Separate trend keywords from regular keywords
-        effective_keywords = list(body.keywords or [])
-        trend_kws = list(body.trend_keywords or []) if body.trend_boost else []
-
-        # Determine effective topic from source
-        topic = body.topic
-        if not topic and body.source_text:
-            topic = body.source_text[:500]
-        if not topic and body.source_url:
-            topic = f"Content about: {body.source_url}"
-
-        if not topic:
-            raise HTTPException(status_code=400, detail="Please provide a topic, source text, or URL.")
-
-        results = {}
-        for platform in platforms:
-            result = await generate_content(
-                platform=platform,
-                tone=body.tone,
-                topic=topic,
-                keywords=effective_keywords or None,
-                include_hashtags=body.include_hashtags,
-                include_mentions=body.include_mentions,
-                target_audience=body.target_audience,
-                include_emojis=body.include_emojis,
-                workspace_id=workspace_id_str,
-                trending_keywords=trend_kws or None,
-                content_length=body.content_length,
-                creativity=body.creativity,
-            )
-            if result.get("success"):
-                # Score quality with enhanced factors
-                score_result = await score_content_quality(
-                    body=result.get("body", ""),
-                    platform=platform,
-                    tone=body.tone,
-                    trending_keywords=trend_kws or None,
-                    target_audience=body.target_audience,
-                )
-                result["quality_score"] = score_result.get("overall", 7)
-                result["quality_details"] = score_result
-            else:
-                # If generation failed for this platform, still include it with error
-                logger.warning(f"Generation failed for {platform.value}: {result.get('error')}")
-            results[platform.value] = result
-
-            # Generate variant if requested (different angle, higher temperature)
-            if body.generate_variants and result.get("success"):
-                variant = await generate_content(
-                    platform=platform,
-                    tone=body.tone,
-                    topic=topic,
-                    keywords=effective_keywords or None,
-                    include_hashtags=body.include_hashtags,
-                    include_mentions=body.include_mentions,
-                    target_audience=body.target_audience,
-                    include_emojis=body.include_emojis,
-                    workspace_id=workspace_id_str,
-                    trending_keywords=trend_kws or None,
-                    content_length=body.content_length,
-                    creativity=min(body.creativity + 20, 100),
-                )
-                results[f"{platform.value}_variant"] = variant
-
-        # Count as one generation regardless of platform count
-        await increment_generation_count(workspace_id=workspace_id_str)
-        return {
-            "results": results,
-            "platforms": [p.value for p in platforms],
-            "usage": {"used": current + 1, "limit": limit},
-        }
-
-    except HTTPException:
-        raise  # Re-raise FastAPI HTTP exceptions as-is
-    except openai.AuthenticationError:
-        logger.error("OpenAI authentication failed — check OPENAI_API_KEY")
-        raise HTTPException(
-            status_code=500,
-            detail="AI service configuration error. Please verify your OpenAI API key.",
-        )
-    except openai.RateLimitError:
-        raise HTTPException(
-            status_code=429,
-            detail="AI service rate limited. Please try again in 30 seconds.",
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Generation failed unexpectedly: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Content generation failed: {str(e)}",
-        )
 
 
 @router.post("/{content_id}/approve")
 async def approve_content(
-    content_id: uuid.UUID, body: ContentApprovalRequest, db: AsyncSession = Depends(get_db)
+    content_id: uuid.UUID,
+    body: ContentApprovalRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Approve or reject content."""
     content = await db.get(Content, content_id)
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Verify ownership
+    if content.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to approve this content")
 
     action_map = {
         "approve": ContentStatus.APPROVED,
@@ -377,11 +392,19 @@ async def submit_for_approval(
 
 
 @router.post("/{content_id}/score")
-async def score_content(content_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def score_content(
+    content_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Score content quality using AI."""
     content = await db.get(Content, content_id)
     if not content or not content.body:
         raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Verify ownership
+    if content.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to score this content")
 
     result = await score_content_quality(
         body=content.body,
@@ -395,7 +418,11 @@ async def score_content(content_id: uuid.UUID, db: AsyncSession = Depends(get_db
 
 
 @router.post("/{content_id}/viral-score")
-async def viral_score_content(content_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def viral_score_content(
+    content_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Score content's viral potential for intelligent scheduling.
 
     Returns a breakdown of 6 factors (100 points total), viral probability,
@@ -404,6 +431,10 @@ async def viral_score_content(content_id: uuid.UUID, db: AsyncSession = Depends(
     content = await db.get(Content, content_id)
     if not content or not content.body:
         raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Verify ownership
+    if content.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to score this content")
 
     try:
         result = await score_viral_potential(

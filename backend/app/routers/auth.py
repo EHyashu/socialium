@@ -21,6 +21,22 @@ from app.schemas.auth import (
 )
 from app.core.constants import SubscriptionTier
 
+from app.models.workspace import Workspace
+
+async def _ensure_workspace(user: User, db: AsyncSession) -> None:
+    """Auto-create a default workspace for new users if they don't have one."""
+    from sqlalchemy import select
+    result = await db.execute(select(Workspace).where(Workspace.owner_id == user.id))
+    existing = result.scalars().first()
+    if not existing:
+        workspace = Workspace(
+            name=f"{user.full_name or user.email.split('@')[0]}'s Workspace",
+            owner_id=user.id,
+        )
+        db.add(workspace)
+        await db.commit()
+        await db.refresh(workspace)
+
 router = APIRouter(tags=["Auth"])
 
 
@@ -48,16 +64,35 @@ async def signup(body: SignUpRequest, db: AsyncSession = Depends(get_db)):
     user_id_str = result.get("user", {}).get("id") or result.get("id")
     user_id = uuid_mod.UUID(user_id_str) if isinstance(user_id_str, str) else user_id_str
 
-    # Create local user record
-    user = User(
-        id=user_id,
-        email=body.email,
-        username=body.username,
-        full_name=body.full_name,
-        subscription_tier=SubscriptionTier.FREE,
-    )
-    db.add(user)
-    await db.commit()
+    # Create or fetch local user record
+    stmt = select(User).where(User.id == user_id)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            id=user_id,
+            email=body.email,
+            username=body.username,
+            full_name=body.full_name,
+            subscription_tier=SubscriptionTier.FREE,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    else:
+        updated = False
+        if body.username and not user.username:
+            user.username = body.username
+            updated = True
+        if body.full_name and not user.full_name:
+            user.full_name = body.full_name
+            updated = True
+        if updated:
+            await db.commit()
+            await db.refresh(user)
+
+    await _ensure_workspace(user, db)
 
     return TokenResponse(
         access_token=result.get("access_token", ""),
@@ -92,6 +127,9 @@ async def login(body: SignInRequest, db: AsyncSession = Depends(get_db)):
         )
         db.add(user)
         await db.commit()
+        await db.refresh(user)
+
+    await _ensure_workspace(user, db)
 
     return TokenResponse(
         access_token=result.get("access_token", ""),
@@ -143,6 +181,8 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
         db.add(user)
         await db.commit()
     
+    await _ensure_workspace(user, db)
+
     return TokenResponse(
         access_token=result.get("access_token", ""),
         refresh_token=result.get("refresh_token", ""),

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { MessageCircle, Send, Settings, Zap, BarChart3 } from "lucide-react";
 import toast from "react-hot-toast";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
+import api from "@/lib/api";
 
 interface AutoReplyConfig {
   workspace_id: string;
@@ -17,7 +18,7 @@ interface AutoReplyConfig {
 }
 
 export default function AutoReplyPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [selectedPlatform, setSelectedPlatform] = useState("linkedin");
@@ -25,7 +26,7 @@ export default function AutoReplyPage() {
   const [generatedReply, setGeneratedReply] = useState("");
   const [testing, setTesting] = useState(false);
   const [config, setConfig] = useState<AutoReplyConfig>({
-    workspace_id: workspaceId,
+    workspace_id: "",
     platform: "linkedin",
     is_enabled: true,
     reply_tone: "professional",
@@ -36,6 +37,18 @@ export default function AutoReplyPage() {
 
   useEffect(() => {
     setMounted(true);
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) {
+          setWorkspaceId(fetched);
+          setConfig(prev => ({ ...prev, workspace_id: fetched }));
+        }
+      });
+    } else {
+      setWorkspaceId(id);
+      setConfig(prev => ({ ...prev, workspace_id: id }));
+    }
   }, []);
 
   const handleTestReply = async () => {
@@ -46,19 +59,13 @@ export default function AutoReplyPage() {
 
     setTesting(true);
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auto-reply/test?comment_text=${encodeURIComponent(
+      const res = await api.post(
+        `/auto-reply/test?comment_text=${encodeURIComponent(
           commentText
-        )}&platform=${selectedPlatform}&tone=${selectedTone}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
+        )}&platform=${selectedPlatform}&tone=${selectedTone}`
       );
 
-      const data = await response.json();
+      const data = res.data;
       
       if (data.should_reply && data.reply) {
         setGeneratedReply(data.reply);
@@ -76,14 +83,7 @@ export default function AutoReplyPage() {
 
   const handleSaveConfig = async () => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auto-reply/config`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify(config),
-      });
+      await api.post("/auto-reply/config", config);
       toast.success("Auto-reply configuration saved!");
     } catch (error) {
       toast.error("Failed to save configuration");

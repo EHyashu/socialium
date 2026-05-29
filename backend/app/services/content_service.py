@@ -564,18 +564,21 @@ Respond with ONLY valid JSON:
 {{"engagement": 0, "clarity": 0, "authenticity": 0, "cta": 0, "platform_fit": 0, "hook_quality": 0, "overall": 0, "feedback": "..."}}"""
 
     try:
-        from anthropic import AsyncAnthropic
+        # Use Groq for quality scoring (Anthropic key may be empty)
+        from groq import AsyncGroq
 
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        model = AI_MODELS.get("quality_scoring", "claude-3-5-sonnet-20241022")
+        groq_client = AsyncGroq(api_key=settings.groq_api_key)
+        groq_model = AI_MODELS.get("fallback", "llama-3.1-8b-instant")
 
-        response = await client.messages.create(
-            model=model,
+        response = await groq_client.chat.completions.create(
+            model=groq_model,
             max_tokens=400,
+            temperature=0.3,
             messages=[{"role": "user", "content": scoring_prompt}],
         )
 
-        result = json.loads(response.content[0].text)
+        raw = response.choices[0].message.content or "{}"
+        result = _safe_json_parse(raw)
 
         # Enhanced scoring: trend relevance bonus
         trend_bonus = 0
@@ -593,7 +596,7 @@ Respond with ONLY valid JSON:
 
         # Apply bonuses (capped at 10)
         overall = result.get("overall", 7)
-        overall = min(10, overall + trend_bonus + audience_bonus)
+        overall = min(10, int(overall) + trend_bonus + audience_bonus)
         result["overall"] = overall
         result["trend_bonus"] = trend_bonus
         result["audience_bonus"] = audience_bonus

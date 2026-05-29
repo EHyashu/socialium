@@ -24,21 +24,32 @@ export default function DashboardLayout({
     const checkAuth = async () => {
       // Give it a small delay to ensure localStorage is accessible
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       const token = localStorage.getItem('access_token');
       console.log('Dashboard auth check - Token exists:', !!token);
       console.log('Dashboard auth check - Token preview:', token ? token.substring(0, 30) + '...' : 'none');
-      
+
       if (!isAuthenticated()) {
         console.log('Not authenticated, redirecting to login...');
         console.log('isAuthenticated() returned:', isAuthenticated());
+        setChecking(false);
         router.push('/login');
       } else {
         console.log('Authenticated, showing dashboard');
-        setChecking(false);
+        // Auto-fetch workspace if not stored
+        try {
+          const { getWorkspaceId, fetchAndStoreWorkspace } = await import('@/lib/workspace');
+          if (!getWorkspaceId()) {
+            await fetchAndStoreWorkspace();
+          }
+        } catch (e) {
+          console.warn('Workspace fetch failed, continuing anyway', e);
+        } finally {
+          setChecking(false);
+        }
       }
     };
-    
+
     checkAuth();
   }, [router]);
 
@@ -83,15 +94,15 @@ export default function DashboardLayout({
 
       <ConfirmModal />
 
-      <Sidebar 
-        collapsed={isMobile ? false : collapsed} 
-        onToggle={() => setCollapsed(!collapsed)} 
+      <Sidebar
+        collapsed={isMobile ? false : collapsed}
+        onToggle={() => setCollapsed(!collapsed)}
         isMobile={isMobile}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
       />
 
-      <div 
+      <div
         className="flex-1 flex flex-col transition-all duration-400 ease-[0.19,1,0.22,1] min-w-0"
         style={{ marginLeft: isMobile ? '0px' : (collapsed ? '80px' : '260px') }}
       >

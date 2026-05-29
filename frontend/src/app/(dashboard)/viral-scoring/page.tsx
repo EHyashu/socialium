@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, Zap, BarChart3, Target, Activity, Sparkles } from "lucide-react";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { useQuery } from "@tanstack/react-query";
 import { listContent } from "@/services/content";
 import type { Content } from "@/types";
@@ -28,12 +28,20 @@ interface ViralScore {
 }
 
 export default function ViralScoringPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) setWorkspaceId(fetched);
+      });
+    } else {
+      setWorkspaceId(id);
+    }
   }, []);
 
   const { data: content } = useQuery<Content[]>({

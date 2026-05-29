@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Sparkles, Mail, Phone } from "lucide-react";
 import { signIn } from "@/services/auth";
 import { setTokens, setStoredUser, isAuthenticated } from "@/lib/auth";
+import { clearWorkspace } from "@/lib/workspace";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
@@ -47,6 +48,8 @@ export default function LoginPage() {
         setStoredUser(res.user);
         console.log('User saved:', res.user.email);
       }
+      
+      clearWorkspace(); // Clear stale workspace ID
       
       toast.success("Welcome back!");
       console.log('Redirecting to dashboard...');

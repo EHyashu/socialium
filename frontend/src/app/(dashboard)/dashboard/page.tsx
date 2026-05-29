@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { listContent } from "@/services/content";
 import { getAnalyticsOverview } from "@/services/analytics";
 import { fetchTrendingKeywords } from "@/services/trends";
@@ -15,12 +15,20 @@ import type { TrendKeyword } from "@/services/trends";
 import toast from "react-hot-toast";
 
 export default function NewDashboardPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) setWorkspaceId(fetched);
+      });
+    } else {
+      setWorkspaceId(id);
+    }
   }, []);
 
   const { data: content } = useQuery<Content[]>({

@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { listContent } from "@/services/content";
 import type { Content } from "@/types";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
 export default function CalendarPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [content, setContent] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,12 +18,27 @@ export default function CalendarPage() {
 
   useEffect(() => {
     setMounted(true);
-    loadContent();
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) {
+          setWorkspaceId(fetched);
+          loadContent(fetched);
+        } else {
+          setLoading(false);
+        }
+      });
+    } else {
+      setWorkspaceId(id);
+      loadContent(id);
+    }
   }, []);
 
-  const loadContent = async () => {
+  const loadContent = async (wsId?: string) => {
+    const targetId = wsId || workspaceId;
+    if (!targetId) return;
     try {
-      const data = await listContent(workspaceId);
+      const data = await listContent(targetId);
       setContent(data);
     } catch (error) {
       console.error("Failed to load content:", error);

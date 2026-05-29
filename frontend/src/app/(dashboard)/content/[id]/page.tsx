@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Send, Calendar, Trash2, Copy, Check } from "lucide-react";
 import { getContent, updateContent, deleteContent, submitForApproval, autoScheduleContent } from "@/services/content";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import type { Content } from "@/types";
 import { formatDate, capitalize } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -14,7 +14,18 @@ import { useUIStore } from "@/store/use-ui-store";
 export default function ContentDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
+
+  useEffect(() => {
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) setWorkspaceId(fetched);
+      });
+    } else {
+      setWorkspaceId(id);
+    }
+  }, []);
   const contentId = params.id as string;
   const { confirm } = useUIStore();
   

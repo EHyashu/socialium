@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { signUp } from "@/services/auth";
 import { setTokens, setStoredUser } from "@/lib/auth";
+import { clearWorkspace } from "@/lib/workspace";
 import toast from "react-hot-toast";
 
 export default function SignupPage() {
@@ -39,6 +40,8 @@ export default function SignupPage() {
         setStoredUser(res.user);
         console.log('User saved:', res.user.email);
       }
+      
+      clearWorkspace(); // Clear stale workspace ID
       
       toast.success("Account created! Welcome to Socialium!");
       console.log('Redirecting to dashboard...');

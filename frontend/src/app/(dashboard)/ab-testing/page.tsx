@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { requireWorkspaceId } from "@/lib/workspace";
+import { requireWorkspaceId, fetchAndStoreWorkspace } from "@/lib/workspace";
 import { listABTests, createABTest, evaluateABTest } from "@/services/ab-testing";
 import type { ABTest } from "@/types";
 import toast from "react-hot-toast";
 
 export default function ABTestingPage() {
-  const workspaceId = requireWorkspaceId();
+  const [workspaceId, setWorkspaceId] = useState("");
   const [mounted, setMounted] = useState(false);
   const [tests, setTests] = useState<ABTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,12 +23,27 @@ export default function ABTestingPage() {
 
   useEffect(() => {
     setMounted(true);
-    loadTests();
+    const id = requireWorkspaceId();
+    if (!id) {
+      fetchAndStoreWorkspace().then(fetched => {
+        if (fetched) {
+          setWorkspaceId(fetched);
+          loadTests(fetched);
+        } else {
+          setLoading(false);
+        }
+      });
+    } else {
+      setWorkspaceId(id);
+      loadTests(id);
+    }
   }, []);
 
-  const loadTests = async () => {
+  const loadTests = async (wsId?: string) => {
+    const targetId = wsId || workspaceId;
+    if (!targetId) return;
     try {
-      const data = await listABTests(workspaceId);
+      const data = await listABTests(targetId);
       setTests(data);
     } catch (error) {
       console.error("Failed to load A/B tests:", error);
