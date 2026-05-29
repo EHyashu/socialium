@@ -26,13 +26,7 @@ export default function DashboardLayout({
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const token = localStorage.getItem('access_token');
-      console.log('Dashboard auth check - Token exists:', !!token);
-      console.log('Dashboard auth check - Token preview:', token ? token.substring(0, 30) + '...' : 'none');
-
       if (!isAuthenticated()) {
-        console.log('Not authenticated, redirecting to login...');
-        console.log('isAuthenticated() returned:', isAuthenticated());
-        setChecking(false);
         router.push('/login');
       } else {
         console.log('Authenticated, showing dashboard');

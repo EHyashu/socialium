@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, KeyRound, Eye, EyeOff } from "lucide-react";
 import { setTokens, isAuthenticated } from "@/lib/auth";
-import { api } from "@/lib/api";
+import api from "@/lib/api";
 import toast from "react-hot-toast";
 
 export default function ResetPasswordPage() {
@@ -38,6 +38,10 @@ export default function ResetPasswordPage() {
     if (accessToken && refreshToken) {
       setTokens(accessToken, refreshToken);
       setIsTokenLoaded(true);
+      // Clean up URL to hide tokens from history/address bar
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     } else {
       // If no token in URL, check if the session is already authenticated
       if (isAuthenticated()) {

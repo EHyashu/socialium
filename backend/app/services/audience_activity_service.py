@@ -351,7 +351,7 @@ class AudienceActivityService:
             # Use the contents table (which is what we actually have)
             query = text("""
                 SELECT
-                    CAST(EXTRACT(DOW FROM published_at) AS INTEGER) AS day_of_week,
+                    CAST(EXTRACT(ISODOW FROM published_at) AS INTEGER) - 1 AS day_of_week,
                     CAST(EXTRACT(HOUR FROM published_at) AS INTEGER) AS hour,
                     AVG(engagement_count) AS avg_engagement,
                     AVG(like_count + comment_count * 3 + share_count * 5) AS avg_viral_score,
@@ -434,7 +434,7 @@ class AudienceActivityService:
         try:
             query = text("""
                 SELECT
-                    CAST(EXTRACT(DOW FROM published_at) AS INTEGER) AS day,
+                    CAST(EXTRACT(ISODOW FROM published_at) AS INTEGER) - 1 AS day,
                     AVG(engagement_count) AS avg_rate
                 FROM contents
                 WHERE workspace_id = :workspace_id

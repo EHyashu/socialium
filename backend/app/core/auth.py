@@ -43,11 +43,13 @@ async def _get_redis():
 
 async def _get_cached_user_id(token: str) -> dict | None:
     """Return cached {user_id, email} for a token if available."""
+    import hashlib
     r = await _get_redis()
     if not r:
         return None
     try:
-        data = await r.get(f"auth:token:{token[:40]}")
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        data = await r.get(f"auth:token:{token_hash}")
         if data:
             return json.loads(data)
     except Exception:
@@ -57,12 +59,14 @@ async def _get_cached_user_id(token: str) -> dict | None:
 
 async def _cache_user_id(token: str, user_id: str, email: str) -> None:
     """Cache {user_id, email} for a token with 5-minute TTL."""
+    import hashlib
     r = await _get_redis()
     if not r:
         return
     try:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
         await r.setex(
-            f"auth:token:{token[:40]}",
+            f"auth:token:{token_hash}",
             TOKEN_CACHE_TTL,
             json.dumps({"user_id": user_id, "email": email}),
         )

@@ -59,14 +59,18 @@ export default function SchedulingPage() {
   useEffect(() => {
     const id = requireWorkspaceId();
     if (!id) {
-      fetchAndStoreWorkspace().then(fetched => {
-        if (fetched) {
-          setWorkspaceId(fetched);
-          loadContent(fetched);
-        } else {
+      fetchAndStoreWorkspace()
+        .then(fetched => {
+          if (fetched) {
+            setWorkspaceId(fetched);
+            loadContent(fetched);
+          } else {
+            setLoading(false);
+          }
+        })
+        .catch(() => {
           setLoading(false);
-        }
-      });
+        });
     } else {
       setWorkspaceId(id);
       loadContent(id);

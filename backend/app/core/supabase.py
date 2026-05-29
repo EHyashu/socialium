@@ -109,35 +109,6 @@ async def supabase_sign_up(email: str, password: str) -> dict | None:
                     if sign_in_result:
                         logger.info(f"User {email} signed in successfully via signup fallback.")
                         return sign_in_result
-                    
-                    # 2. If sign-in failed, check if user is unconfirmed.
-                    # We look up the user using the admin list API.
-                    users = await supabase_admin_list_users()
-                    target_user = None
-                    for u in users:
-                        if u.get("email") == email:
-                            target_user = u
-                            break
-                    
-                    if target_user:
-                        user_id = target_user.get("id")
-                        is_unconfirmed = not target_user.get("email_confirmed_at") or not target_user.get("user_metadata", {}).get("email_verified", True)
-                        if is_unconfirmed:
-                            logger.info(f"User {email} is unconfirmed. Auto-confirming and updating password.")
-                            # Update password and confirm user email
-                            update_response = await client.put(
-                                f"{settings.supabase_url}/auth/v1/admin/users/{user_id}",
-                                headers=headers,
-                                json={
-                                    "password": password,
-                                    "email_confirm": True
-                                }
-                            )
-                            if update_response.status_code == 200:
-                                # Try signing in again with the updated credentials
-                                sign_in_result = await supabase_sign_in(email, password)
-                                if sign_in_result:
-                                    return sign_in_result
             except Exception as e:
                 logger.error(f"Error handling existing user signup fallback for {email}: {e}", exc_info=True)
             

@@ -36,16 +36,25 @@ from app.models.workspace import Workspace
 async def _ensure_workspace(user: User, db: AsyncSession) -> None:
     """Auto-create a default workspace for new users if they don't have one."""
     from sqlalchemy import select
-    result = await db.execute(select(Workspace).where(Workspace.owner_id == user.id))
-    existing = result.scalars().first()
-    if not existing:
-        workspace = Workspace(
-            name=f"{user.full_name or user.email.split('@')[0]}'s Workspace",
-            owner_id=user.id,
-        )
-        db.add(workspace)
-        await db.commit()
-        await db.refresh(workspace)
+    try:
+        result = await db.execute(select(Workspace).where(Workspace.owner_id == user.id))
+        existing = result.scalars().first()
+        if not existing:
+            workspace = Workspace(
+                name=f"{user.full_name or user.email.split('@')[0]}'s Workspace",
+                owner_id=user.id,
+            )
+            db.add(workspace)
+            await db.commit()
+            await db.refresh(workspace)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Workspace auto-creation failed (non-blocking): {e}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 router = APIRouter(tags=["Auth"])
 
