@@ -290,12 +290,14 @@ async def approve_content(
             
             if optimal_time:
                 content.scheduled_at = optimal_time
+                content.status = ContentStatus.SCHEDULED
                 logger.info(f"Content {content_id} auto-scheduled for {optimal_time}")
         except Exception as e:
             logger.warning(f"Failed to auto-schedule content: {e}")
             # Fallback: schedule for 1 hour from now
             from datetime import datetime, timedelta
             content.scheduled_at = datetime.utcnow() + timedelta(hours=1)
+            content.status = ContentStatus.SCHEDULED
     
     await db.commit()
 
