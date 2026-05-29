@@ -555,6 +555,12 @@ class AudienceActivityService:
                     data_source="combined",
                 ))
 
+        # Prefer recommendations within the next 24 hours when available.
+        within_24h = [slot for slot in result_slots if slot.scheduled_at and slot.scheduled_at <= now + timedelta(hours=24)]
+        if within_24h:
+            remaining = [slot for slot in result_slots if slot not in within_24h]
+            result_slots = within_24h + remaining
+
         return result_slots[:8]
 
     # ── Helpers ───────────────────────────────────────────────────────────────

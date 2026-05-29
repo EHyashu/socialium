@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Calendar, Clock, Zap, RefreshCw, CheckCircle, BarChart3 } from "lucide-react";
-import { listContent, autoScheduleContent, getOptimalTime, bulkAutoSchedule } from "@/services/content";
+import { listContent, autoScheduleContent, getOptimalTime, bulkAutoSchedule, scheduleContentManually } from "@/services/content";
 import { requireWorkspaceId } from "@/lib/workspace";
 import type { Content } from "@/types";
 import { capitalize } from "@/lib/utils";
@@ -40,7 +40,7 @@ interface ViralScoreResult {
   recommendation: string;
 }
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export default function SchedulingPage() {
   const router = useRouter();
@@ -55,6 +55,9 @@ export default function SchedulingPage() {
   const [optimalTime, setOptimalTime] = useState<OptimalTimeResult | null>(null);
   const [viralScore, setViralScore] = useState<ViralScoreResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [manualDate, setManualDate] = useState<string>("");
+  const [manualTime, setManualTime] = useState<string>("");
+  const [manualScheduling, setManualScheduling] = useState(false);
 
   useEffect(() => {
     loadContent();
@@ -113,6 +116,45 @@ export default function SchedulingPage() {
       toast.error(error?.response?.data?.detail || "Failed to schedule");
     } finally {
       setScheduling(null);
+    }
+  };
+
+  const getDefaultManualSchedule = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 2);
+    return {
+      date: now.toLocaleDateString("en-CA"),
+      time: now.toTimeString().slice(0, 5),
+    };
+  };
+
+  useEffect(() => {
+    if (!selectedContent) return;
+    const defaultSchedule = getDefaultManualSchedule();
+    setManualDate(defaultSchedule.date);
+    setManualTime(defaultSchedule.time);
+  }, [selectedContent]);
+
+  const handleManualSchedule = async (content: Content) => {
+    if (!manualDate || !manualTime) {
+      toast.error("Please select both date and time.");
+      return;
+    }
+
+    setManualScheduling(true);
+    try {
+      const scheduledAt = `${manualDate}T${manualTime}:00`;
+      await scheduleContentManually(content.id, scheduledAt);
+      toast.success(`✅ Scheduled for ${manualDate} ${manualTime}`);
+      loadContent();
+      setSelectedContent(null);
+      setOptimalTime(null);
+      setViralScore(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.detail || "Failed to schedule manually");
+    } finally {
+      setManualScheduling(false);
     }
   };
 
@@ -240,70 +282,121 @@ export default function SchedulingPage() {
                 <span className="material-symbols-outlined text-4xl animate-spin block mb-4" style={{ color: "#6366f1" }}>progress_activity</span>
                 <p style={{ color: "var(--text-secondary)" }}>AI is analyzing...</p>
               </div>
-            ) : optimalTime && viralScore ? (
+            ) : selectedContent ? (
               <div className="space-y-4">
-                {/* Viral Score */}
-                <div className="glass-card rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                      <BarChart3 className="h-5 w-5" /> Viral Score
-                    </h3>
-                    <span className="text-2xl font-bold" style={{ color: viralScore.total_score >= 65 ? "#10b981" : viralScore.total_score >= 40 ? "#f59e0b" : "#ef4444" }}>
-                      {viralScore.total_score}/100
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 mb-4">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${viralScore.total_score}%`, background: viralScore.total_score >= 65 ? "#10b981" : viralScore.total_score >= 40 ? "#f59e0b" : "#ef4444" }}
-                    />
-                  </div>
-                  <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>{viralScore.recommendation}</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    {viralScore.breakdown && Object.entries(viralScore.breakdown).map(([key, value]) => (
-                      <div key={key} className="p-3 rounded-lg" style={{ background: "var(--bg-hover)" }}>
-                        <p className="text-xs capitalize" style={{ color: "var(--text-secondary)" }}>{key}</p>
-                        <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{value}</p>
+                {optimalTime && viralScore ? (
+                  <>
+                    {/* Viral Score */}
+                    <div className="glass-card rounded-xl p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                          <BarChart3 className="h-5 w-5" /> Viral Score
+                        </h3>
+                        <span className="text-2xl font-bold" style={{ color: viralScore.total_score >= 65 ? "#10b981" : viralScore.total_score >= 40 ? "#f59e0b" : "#ef4444" }}>
+                          {viralScore.total_score}/100
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Optimal Time */}
-                <div className="glass-card rounded-xl p-6">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                    <Clock className="h-5 w-5" /> Best Time to Post
-                  </h3>
-                  <div className="p-4 rounded-lg mb-4" style={{ background: "rgba(99, 102, 241, 0.1)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
-                    <p className="text-lg font-bold" style={{ color: "#6366f1" }}>
-                      {formatTimeSlot(optimalTime.best_slot.day_of_week, optimalTime.best_slot.hour)}
-                    </p>
-                    <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>{optimalTime.reasoning}</p>
-                  </div>
-                  {optimalTime.alternative_slots.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Alternative Times:</p>
-                      <div className="space-y-2">
-                        {optimalTime.alternative_slots.slice(0, 2).map((slot, i) => (
-                          <div key={i} className="flex justify-between p-3 rounded-lg" style={{ background: "var(--bg-hover)" }}>
-                            <span style={{ color: "var(--text-primary)" }}>{formatTimeSlot(slot.day_of_week, slot.hour)}</span>
-                            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Score: {slot.score.toFixed(1)}</span>
+                      <div className="h-2 rounded-full bg-white/10 mb-4">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${viralScore.total_score}%`, background: viralScore.total_score >= 65 ? "#10b981" : viralScore.total_score >= 40 ? "#f59e0b" : "#ef4444" }}
+                        />
+                      </div>
+                      <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>{viralScore.recommendation}</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {viralScore.breakdown && Object.entries(viralScore.breakdown).map(([key, value]) => (
+                          <div key={key} className="p-3 rounded-lg" style={{ background: "var(--bg-hover)" }}>
+                            <p className="text-xs capitalize" style={{ color: "var(--text-secondary)" }}>{key}</p>
+                            <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{value}</p>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Action */}
-                <button
-                  onClick={() => handleAutoSchedule(selectedContent)}
-                  disabled={scheduling === selectedContent.id}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {scheduling === selectedContent.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                  {scheduling === selectedContent.id ? "Scheduling..." : "Confirm & Schedule"}
-                </button>
+                    {/* Optimal Time */}
+                    <div className="glass-card rounded-xl p-6">
+                      <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                        <Clock className="h-5 w-5" /> Best Time to Post
+                      </h3>
+                      <div className="p-4 rounded-lg mb-4" style={{ background: "rgba(99, 102, 241, 0.1)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
+                        <p className="text-lg font-bold" style={{ color: "#6366f1" }}>
+                          {formatTimeSlot(optimalTime.best_slot.day_of_week, optimalTime.best_slot.hour)}
+                        </p>
+                        <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>{optimalTime.reasoning}</p>
+                      </div>
+                      {optimalTime.alternative_slots.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Alternative Times:</p>
+                          <div className="space-y-2">
+                            {optimalTime.alternative_slots.slice(0, 2).map((slot, i) => (
+                              <div key={i} className="flex justify-between p-3 rounded-lg" style={{ background: "var(--bg-hover)" }}>
+                                <span style={{ color: "var(--text-primary)" }}>{formatTimeSlot(slot.day_of_week, slot.hour)}</span>
+                                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Score: {slot.score.toFixed(1)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action */}
+                    <button
+                      onClick={() => handleAutoSchedule(selectedContent)}
+                      disabled={scheduling === selectedContent.id}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {scheduling === selectedContent.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                      {scheduling === selectedContent.id ? "Scheduling..." : "Confirm & Schedule"}
+                    </button>
+                  </>
+                ) : (
+                  <div className="glass-card rounded-xl p-12 text-center">
+                    <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+                      Ready to schedule
+                    </h3>
+                    <p style={{ color: "var(--text-secondary)" }}>
+                      Use AI analysis or choose a specific date and time.
+                    </p>
+                  </div>
+                )}
+
+                {/* Manual Schedule */}
+                <div className="glass-card rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                    <Calendar className="h-5 w-5" /> Manual Schedule
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                      Date
+                      <input
+                        type="date"
+                        value={manualDate}
+                        onChange={(e) => setManualDate(e.target.value)}
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                      Time (24h)
+                      <input
+                        type="time"
+                        value={manualTime}
+                        onChange={(e) => setManualTime(e.target.value)}
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    onClick={() => handleManualSchedule(selectedContent)}
+                    disabled={manualScheduling}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    {manualScheduling ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                    {manualScheduling ? "Scheduling..." : "Schedule at this time"}
+                  </button>
+                  <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
+                    Use the date and 24-hour time fields to schedule this post exactly when you want.
+                  </p>
+                </div>
               </div>
             ) : null}
           </div>
