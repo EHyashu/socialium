@@ -5,7 +5,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-const NAV_ITEMS = [
+interface NavItem {
+  icon: string;
+  label: string;
+  path: string;
+  color: string;
+  badge?: string;
+  isNew?: boolean;
+}
+
+interface NavGroup {
+  group: string;
+  items: NavItem[];
+}
+
+const NAV_ITEMS: NavGroup[] = [
   {
     group: "MAIN",
     items: [
@@ -41,13 +55,6 @@ const NAV_ITEMS = [
         path: "/calendar",
         color: "text-purple-400",
       },
-      {
-        icon: "🧪",
-        label: "A/B Testing",
-        path: "/ab-testing",
-        color: "text-teal-400",
-        isNew: true,
-      },
     ],
   },
   {
@@ -68,20 +75,6 @@ const NAV_ITEMS = [
         badge: "2",
       },
       {
-        icon: "⌖",
-        label: "Trends",
-        path: "/trends",
-        color: "text-cyan-400",
-        isNew: true,
-      },
-      {
-        icon: "🔥",
-        label: "Viral Scoring",
-        path: "/viral-scoring",
-        color: "text-red-400",
-        isNew: true,
-      },
-      {
         icon: "💬",
         label: "Auto Reply",
         path: "/auto-reply",
@@ -98,18 +91,6 @@ const NAV_ITEMS = [
         label: "Platforms",
         path: "/platforms",
         color: "text-orange-400",
-      },
-      {
-        icon: "◎",
-        label: "Notifications",
-        path: "/notifications",
-        color: "text-slate-400",
-      },
-      {
-        icon: "◫",
-        label: "Billing",
-        path: "/settings/billing",
-        color: "text-slate-400",
       },
     ],
   },

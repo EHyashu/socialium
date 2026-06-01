@@ -75,7 +75,8 @@ class PublishingService:
                     logger.error(f"Account ID: {account.platform_user_id}")
                     return {
                         "success": False,
-                        "error": f"LinkedIn API {response.status_code}: {error_text}"
+                        "error": f"LinkedIn API {response.status_code}: {error_text}",
+                        "status_code": response.status_code
                     }
         except Exception as e:
             logger.error(f"Failed to publish to LinkedIn: {e}")

@@ -14,10 +14,11 @@ export type ContentStatus =
 export type ContentTone =
   | "professional"
   | "casual"
-  | "humorous"
-  | "inspirational"
+  | "thought_leadership"
   | "educational"
-  | "promotional";
+  | "storytelling"
+  | "humorous"
+  | "persuasive";
 
 export type SourceType = "manual" | "ai_generated" | "trend_based" | "template" | "recycled";
 
@@ -146,8 +147,13 @@ export interface ContentGenerateRequest {
 }
 
 export interface PlatformResult {
-  title: string;
+  title?: string;
+  hook?: string;
   body: string;
+  discussion_question?: string;
+  engagement_question?: string;
+  question?: string;
+  cta?: string;
   hashtags: string[];
   mentions: string[];
   model_used: string;
@@ -155,11 +161,17 @@ export interface PlatformResult {
   quality_score?: number;
   quality_details?: Record<string, number | string>;
   error?: string;
+  variant_id?: string;
 }
 
 export interface GenerateResponse {
   results: Record<string, PlatformResult>;
   platforms: string[];
+  trends_used?: string[];
+  ab_test_recommendation?: {
+    best_variant: string;
+    reasoning: string;
+  };
   usage: { used: number; limit: number };
 }
 

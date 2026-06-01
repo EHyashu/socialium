@@ -37,10 +37,11 @@ class WorkspaceRole(str, enum.Enum):
 class ContentTone(str, enum.Enum):
     PROFESSIONAL = "professional"
     CASUAL = "casual"
-    HUMOROUS = "humorous"
-    INSPIRATIONAL = "inspirational"
+    THOUGHT_LEADERSHIP = "thought_leadership"
     EDUCATIONAL = "educational"
-    PROMOTIONAL = "promotional"
+    STORYTELLING = "storytelling"
+    HUMOROUS = "humorous"
+    PERSUASIVE = "persuasive"
 
 
 class SourceType(str, enum.Enum):

@@ -1,4 +1,4 @@
-"""Content publishing worker — publishes scheduled posts."""
+"""Content publishing worker — publishes scheduled posts with fallback strategy."""
 
 import asyncio
 import logging
@@ -9,19 +9,30 @@ from app.database import async_session_factory
 from app.models.content import Content
 from app.core.constants import ContentStatus
 from app.services.publishing_service import PublishingService
+from app.services.publish_failure_classifier import PublishFailureReason
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 async def publish_scheduled_content() -> None:
-    """Publish all content that is scheduled and due."""
+    """Publish all content that is scheduled and due.
+    
+    Fallback Strategy:
+    1. Attempt to publish content
+    2. If failed, classify the failure reason
+    3. Store failure reason in database for user visibility
+    4. If retryable, schedule automatic retry with exponential backoff
+    5. If not retryable, mark as failed with clear action steps
+    6. Notify user of critical failures via WhatsApp/email
+    """
     publisher = PublishingService()
     
     try:
         async with async_session_factory() as db:
             from sqlalchemy import select
 
+            # Get all scheduled content that is due
             result = await db.execute(
                 select(Content)
                 .where(
@@ -30,6 +41,12 @@ async def publish_scheduled_content() -> None:
                 )
             )
             contents = result.scalars().all()
+            
+            if not contents:
+                logger.debug("No scheduled content due for publishing")
+                return
+
+            logger.info(f"Found {len(contents)} scheduled content(s) to publish")
 
             for content in contents:
                 try:
@@ -37,22 +54,85 @@ async def publish_scheduled_content() -> None:
                     publish_result = await publisher.publish_content(content, db)
                     
                     if publish_result.get("success"):
+                        # ✅ SUCCESS
                         content.status = ContentStatus.PUBLISHED
                         content.published_at = datetime.now(timezone.utc)
+                        content.publish_failure_reason = None  # Clear any previous failure
+                        content.publish_retry_count = 0
                         # Store platform post ID for analytics tracking
                         content.ai_model_used = publish_result.get("platform_post_id", "")
                         await db.commit()
-                        logger.info(f"Published content {content.id} to {content.platform.value}: {publish_result.get('platform_url')}")
+                        logger.info(f"✅ Published content {content.id} to {content.platform.value}: {publish_result.get('platform_url')}")
+                    else:
+                        # ❌ FAILED - Classify the failure reason
+                        error_message = publish_result.get("error", "Unknown error")
+                        status_code = publish_result.get("status_code")
+                        
+                        failure_info = PublishFailureReason.classify(error_message, status_code)
+                        
+                        # Store failure details
+                        content.publish_failure_reason = f"[{failure_info['category']}] {failure_info['reason']}"
+                        content.publish_last_retry_at = datetime.now(timezone.utc)
+                        
+                        # Check if we should retry
+                        if PublishFailureReason.should_retry(failure_info):
+                            content.publish_retry_count += 1
+                            retry_delay = PublishFailureReason.get_retry_delay(
+                                failure_info, 
+                                content.publish_retry_count
+                            )
+                            content.publish_next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)
+                            
+                            # Keep status as SCHEDULED so it will be retried
+                            await db.commit()
+                            
+                            logger.warning(
+                                f"⚠️ Content {content.id} failed (retryable): {failure_info['category']} - "
+                                f"Will retry in {retry_delay}s (attempt {content.publish_retry_count})"
+                            )
+                        else:
+                            # Not retryable - mark as failed with clear reason
+                            content.status = ContentStatus.FAILED
+                            await db.commit()
+                            
+                            logger.error(
+                                f"❌ Content {content.id} failed (not retryable): {failure_info['category']} - "
+                                f"{failure_info['reason']}"
+                            )
+                            
+                            # TODO: Send notification to user about critical failure
+                            # await notify_user_publish_failure(content, failure_info)
+                            
+                except Exception as e:
+                    # Unexpected exception - classify and retry
+                    await db.rollback()
+                    
+                    failure_info = PublishFailureReason.classify(str(e))
+                    content.publish_failure_reason = f"[EXCEPTION] {str(e)[:200]}"
+                    content.publish_last_retry_at = datetime.now(timezone.utc)
+                    
+                    if PublishFailureReason.should_retry(failure_info):
+                        content.publish_retry_count += 1
+                        retry_delay = PublishFailureReason.get_retry_delay(
+                            failure_info,
+                            content.publish_retry_count
+                        )
+                        content.publish_next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)
+                        # Keep as SCHEDULED for retry
+                        await db.commit()
+                        
+                        logger.error(
+                            f"⚠️ Content {content.id} exception (retryable): {e} - "
+                            f"Will retry in {retry_delay}s"
+                        )
                     else:
                         content.status = ContentStatus.FAILED
                         await db.commit()
-                        logger.error(f"Failed to publish content {content.id}: {publish_result.get('error')}")
                         
-                except Exception as e:
-                    await db.rollback()
-                    content.status = ContentStatus.FAILED
-                    await db.commit()
-                    logger.error(f"Publish error for {content.id}: {e}", exc_info=True)
+                        logger.error(
+                            f"❌ Content {content.id} exception (not retryable): {e}",
+                            exc_info=True
+                        )
 
     except Exception as e:
         logger.error(f"Publish worker failed: {e}", exc_info=True)

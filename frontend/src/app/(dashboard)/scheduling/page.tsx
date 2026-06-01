@@ -14,12 +14,16 @@ import Link from "next/link";
 interface OptimalTimeResult {
   best_slot: {
     day_of_week: number;
+    day_name: string;
     hour: number;
+    hour_label: string;
     scheduled_at: string;
   };
   alternative_slots: Array<{
     day_of_week: number;
+    day_name: string;
     hour: number;
+    hour_label: string;
     score: number;
     scheduled_at: string;
   }>;
@@ -39,8 +43,6 @@ interface ViralScoreResult {
   };
   recommendation: string;
 }
-
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default function SchedulingPage() {
   const router = useRouter();
@@ -189,11 +191,10 @@ export default function SchedulingPage() {
     }
   };
 
-  const formatTimeSlot = (dayOfWeek: number, hour: number) => {
-    const day = DAY_NAMES[dayOfWeek];
+  const formatTimeSlot = (dayName: string, hour: number) => {
     const time = new Date();
     time.setHours(hour, 0, 0, 0);
-    return `${day} at ${time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
+    return `${dayName} at ${time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
   };
 
   if (loading) {
@@ -334,7 +335,7 @@ export default function SchedulingPage() {
                   </h3>
                   <div className="p-4 rounded-lg mb-4" style={{ background: "rgba(99, 102, 241, 0.1)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
                     <p className="text-lg font-bold" style={{ color: "#6366f1" }}>
-                      {formatTimeSlot(optimalTime.best_slot.day_of_week, optimalTime.best_slot.hour)}
+                      {formatTimeSlot(optimalTime.best_slot.day_name, optimalTime.best_slot.hour)}
                     </p>
                     <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>{optimalTime.reasoning}</p>
                   </div>
@@ -353,7 +354,7 @@ export default function SchedulingPage() {
                             }`}
                             style={{ background: "var(--bg-hover)" }}
                           >
-                            <span style={{ color: "var(--text-primary)" }}>{formatTimeSlot(slot.day_of_week, slot.hour)}</span>
+                            <span style={{ color: "var(--text-primary)" }}>{formatTimeSlot(slot.day_name, slot.hour)}</span>
                             <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Score: {slot.score.toFixed(1)}</span>
                           </div>
                         ))}

@@ -89,9 +89,17 @@ class TimeSlot:
     data_source: str = "benchmark"
 
     def to_dict(self) -> dict[str, Any]:
+        # Calculate day_name from actual scheduled_at if available
+        if self.scheduled_at:
+            actual_day_name = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][self.scheduled_at.weekday()]
+            actual_day_of_week = self.scheduled_at.weekday()
+        else:
+            actual_day_name = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][self.day_of_week]
+            actual_day_of_week = self.day_of_week
+        
         return {
-            "day_of_week": self.day_of_week,
-            "day_name": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][self.day_of_week],
+            "day_of_week": actual_day_of_week,
+            "day_name": actual_day_name,
             "hour": self.hour,
             "hour_label": f"{self.hour:02d}:00 UTC",
             "avg_engagement": round(self.avg_engagement, 2),
@@ -232,7 +240,7 @@ class AudienceActivityService:
                 hour=best_data["hour"],
                 avg_engagement=best_data.get("avg_engagement", 0),
                 score=best_data.get("score", 0),
-                scheduled_at=self._next_occurrence(best_data["day_of_week"], best_data["hour"]),
+                scheduled_at=self._next_occurrence(best_data["day_of_week"], best_data["hour"], within_24h=True),
                 data_source=best_data.get("data_source", "cached"),
             )
             alt_slots = [
@@ -241,7 +249,7 @@ class AudienceActivityService:
                     hour=s["hour"],
                     avg_engagement=s.get("avg_engagement", 0),
                     score=s.get("score", 0),
-                    scheduled_at=self._next_occurrence(s["day_of_week"], s["hour"]),
+                    scheduled_at=self._next_occurrence(s["day_of_week"], s["hour"], within_24h=True),
                     data_source=s.get("data_source", "cached"),
                 )
                 for s in cached.get("alternative_slots", [])
@@ -286,7 +294,7 @@ class AudienceActivityService:
                     day_of_week=b["day"],
                     hour=b["hour"],
                     avg_engagement=b["eng"],
-                    scheduled_at=self._next_occurrence(b["day"], b["hour"]),
+                    scheduled_at=self._next_occurrence(b["day"], b["hour"], within_24h=True),
                     data_source="benchmark_fallback",
                 )
                 for b in (PLATFORM_BENCHMARKS.get(platform, {}).get("default", [])[:4])
@@ -545,7 +553,7 @@ class AudienceActivityService:
         result_slots: list[TimeSlot] = []
 
         for (day, hour), score in sorted(time_matrix.items(), key=lambda x: x[1], reverse=True):
-            next_time = self._next_occurrence(day, hour)
+            next_time = self._next_occurrence(day, hour, within_24h=True)
             if next_time > now + timedelta(minutes=30):
                 result_slots.append(TimeSlot(
                     day_of_week=day,
@@ -559,18 +567,44 @@ class AudienceActivityService:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _next_occurrence(self, day_of_week: int, hour: int) -> datetime:
-        """Calculate the next future occurrence of a given day+hour."""
+    def _next_occurrence(self, day_of_week: int, hour: int, within_24h: bool = True) -> datetime:
+        """Calculate the next future occurrence of a given day+hour.
+        
+        Args:
+            day_of_week: Target day (0=Monday, 6=Sunday)
+            hour: Target hour (0-23 UTC)
+            within_24h: If True, prioritize scheduling within next 24 hours
+        """
         now = datetime.now(timezone.utc)
-        days_ahead = day_of_week - now.weekday()
-        if days_ahead < 0:
-            days_ahead += 7
-        elif days_ahead == 0 and now.hour >= hour:
-            days_ahead = 7
+        
+        if within_24h:
+            # Strategy: Find the best time within next 24 hours
+            # Try today's occurrence of this hour
+            target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            
+            # If this hour has passed today, try tomorrow at same hour
+            if target <= now:
+                target += timedelta(days=1)
+            
+            # Ensure we don't go beyond 24 hours from now
+            max_time = now + timedelta(hours=24)
+            if target > max_time:
+                # Fallback: schedule for 2 hours from now
+                target = now + timedelta(hours=2)
+                target = target.replace(minute=0, second=0, microsecond=0)
+            
+            return target
+        else:
+            # Original behavior: wait for the specific day of week
+            days_ahead = day_of_week - now.weekday()
+            if days_ahead < 0:
+                days_ahead += 7
+            elif days_ahead == 0 and now.hour >= hour:
+                days_ahead = 7
 
-        target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-        target += timedelta(days=days_ahead)
-        return target
+            target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            target += timedelta(days=days_ahead)
+            return target
 
     def _calculate_confidence(self, historical_slots: list[TimeSlot]) -> float:
         """Confidence is higher when we have more historical data."""
@@ -626,7 +660,7 @@ async def get_optimal_posting_times(
         # No database session — use benchmarks only
         benchmarks = _service._get_platform_benchmarks(platform, target_audience)
         best = benchmarks[0] if benchmarks else TimeSlot(day_of_week=1, hour=9)
-        best.scheduled_at = _service._next_occurrence(best.day_of_week, best.hour)
+        best.scheduled_at = _service._next_occurrence(best.day_of_week, best.hour, within_24h=True)
         return OptimalTimeResult(
             best_slot=best,
             alternative_slots=benchmarks[1:4],

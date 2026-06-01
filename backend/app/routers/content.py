@@ -50,6 +50,9 @@ async def generate_ai_content(
                 f"trend_boost={body.trend_boost}, variants={body.generate_variants}")
 
     try:
+        logger.info(f"🚀 Content generation request: workspace={body.workspace_id}, platforms={body.platforms}")
+        logger.info(f"   topic={body.topic[:100] if body.topic else 'None'}, source_url={body.source_url}, source_text={body.source_text[:50] if body.source_text else 'None'}")
+        
         # Enforce per-workspace daily generation budget
         platforms = body.get_platforms()
         workspace_id_str = str(body.workspace_id)
@@ -66,12 +69,41 @@ async def generate_ai_content(
         effective_keywords = list(body.keywords or [])
         trend_kws = list(body.trend_keywords or []) if body.trend_boost else []
 
+        # Fetch real trends if trend_boost is enabled
+        if body.trend_boost and body.trend_industry:
+            try:
+                from app.services.trend_service import fetch_trending_topics
+                # Fetch trends for the first platform (trends are generally platform-agnostic)
+                trend_kws = await fetch_trending_topics(body.trend_industry, platforms[0] if platforms else None)
+                logger.info(f"✅ Fetched {len(trend_kws)} trending topics for {body.trend_industry}: {trend_kws[:5]}")
+            except Exception as e:
+                logger.warning(f"❌ Trend fetching failed: {e}, using empty trend list")
+                trend_kws = []
+
         # Determine effective topic from source
         topic = body.topic
+        
+        # If topic looks like a URL, treat it as source_url
+        if topic and topic.strip().startswith(('http://', 'https://')):
+            logger.info(f"🔗 Detected URL in topic field, routing to URL extraction")
+            body.source_url = topic.strip()
+            topic = None
+        
         if not topic and body.source_text:
             topic = body.source_text[:500]
+        
+        # If URL is provided, extract actual content from it
         if not topic and body.source_url:
-            topic = f"Content about: {body.source_url}"
+            try:
+                from app.services.url_extractor import extract_url_content
+                url_data = await extract_url_content(body.source_url)
+                
+                # Use extracted content as topic
+                topic = url_data.get('content', f"Content about: {body.source_url}")
+                logger.info(f"✅ Extracted content from URL: {url_data.get('source_type')} - {url_data.get('title', '')[:50]}")
+            except Exception as e:
+                logger.warning(f"❌ URL extraction failed: {e}, using URL as topic")
+                topic = f"Content about: {body.source_url}"
 
         if not topic:
             raise HTTPException(status_code=400, detail="Please provide a topic, source text, or URL.")
@@ -128,9 +160,28 @@ async def generate_ai_content(
 
         # Count as one generation regardless of platform count
         await increment_generation_count(workspace_id=workspace_id_str)
+        
+        # Build A/B test recommendation if variants were generated
+        ab_recommendation = None
+        if body.generate_variants:
+            logger.info(f"🧪 A/B Testing: Looking for variants in results...")
+            # Find variants and score them
+            variants = {k: v for k, v in results.items() if 'variant' in k or results[k].get('variant_id')}
+            logger.info(f"🧪 A/B Testing: Found {len(variants)} variants: {list(variants.keys())}")
+            if variants:
+                # Simple scoring based on quality_score
+                best_variant = max(variants.items(), key=lambda x: x[1].get('quality_score', 0))
+                ab_recommendation = {
+                    "best_variant": best_variant[0],
+                    "reasoning": f"This variant scored highest on engagement potential with a quality score of {best_variant[1].get('quality_score', 0)}/10."
+                }
+                logger.info(f"✅ A/B Testing: Recommended {best_variant[0]} with score {best_variant[1].get('quality_score', 0)}")
+        
         return {
             "results": results,
             "platforms": [p.value for p in platforms],
+            "trends_used": trend_kws if body.trend_boost else [],
+            "ab_test_recommendation": ab_recommendation,
             "usage": {"used": current + 1, "limit": limit},
         }
 

@@ -18,6 +18,9 @@ anthropic>=0.40.0
 groq>=0.15.0
 pytrends>=4.9.0
 
+# URL extraction & web scraping
+beautifulsoup4>=4.12.0
+
 # Vector DB
 qdrant-client>=1.12.0
 

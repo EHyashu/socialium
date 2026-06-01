@@ -36,7 +36,15 @@ RULES:
 - End with a question that invites thoughtful comments
 - 3-5 relevant hashtags at the very end, each on the same line separated by spaces
 - Target length: 800-1300 characters (body excluding hashtags)
-- Output valid JSON: {"title": "", "body": "...", "hashtags": [...]}""",
+- You MUST output ONLY a valid JSON object with these EXACT fields (no extra text, no markdown):
+  * hook: string (first 2 lines that create curiosity)
+  * body: string (main content with short paragraphs)
+  * discussion_question: string (question to invite comments)
+  * cta: string (call-to-action line)
+  * hashtags: array of strings (3-5 hashtags)
+
+Example format:
+{"hook": "...", "body": "...", "discussion_question": "...", "cta": "...", "hashtags": ["#tag1", "#tag2"]}""",
 
     Platform.TWITTER: """You are a world-class Twitter/X content strategist.
 
@@ -48,7 +56,15 @@ RULES:
 - Hook must create curiosity or make a bold statement
 - Conversational, punchy, no filler words
 - 2-3 hashtags ONLY
-- Output valid JSON: {"title": "", "body": "...", "hashtags": [...]}""",
+- You MUST output ONLY a valid JSON object with these EXACT fields (no extra text, no markdown):
+  * hook: string (opening line that grabs attention)
+  * body: string (main tweet or thread content)
+  * engagement_question: string (question to encourage replies)
+  * cta: string (call-to-action)
+  * hashtags: array of strings (2-3 hashtags)
+
+Example format:
+{"hook": "...", "body": "...", "engagement_question": "...", "cta": "...", "hashtags": ["#tag1", "#tag2"]}""",
 
     Platform.INSTAGRAM: """You are a world-class Instagram content strategist.
 
@@ -59,7 +75,14 @@ RULES:
 - 8-15 hashtags in a SEPARATE block at the end (they go in the hashtags array)
 - Strong CTA: "Save this post", "Tag a friend who needs this", "Link in bio"
 - Target: 100-200 words for caption body (before hashtags)
-- Output valid JSON: {"title": "", "body": "...", "hashtags": [...]}""",
+- You MUST output ONLY a valid JSON object with these EXACT fields (no extra text, no markdown):
+  * hook: string (first line before the more cutoff)
+  * body: string (main caption with storytelling and emojis)
+  * cta: string (strong call-to-action)
+  * hashtags: array of strings (8-15 hashtags)
+
+Example format:
+{"hook": "...", "body": "...", "cta": "...", "hashtags": ["#tag1", "#tag2"]}""",
 
     Platform.FACEBOOK: """You are a world-class Facebook content strategist.
 
@@ -70,7 +93,14 @@ RULES:
 - 2-3 hashtags only
 - Emojis used sparingly (1-2 max)
 - Target length: 200-500 characters
-- Output valid JSON: {"title": "", "body": "...", "hashtags": [...]}""",
+- You MUST output ONLY a valid JSON object with these EXACT fields (no extra text, no markdown):
+  * hook: string (opening line that grabs attention)
+  * body: string (main post content)
+  * question: string (question to encourage comments)
+  * hashtags: array of strings (2-3 hashtags)
+
+Example format:
+{"hook": "...", "body": "...", "question": "...", "hashtags": ["#tag1", "#tag2"]}""",
 
     Platform.WHATSAPP: """You are a conversational content writer for WhatsApp broadcasts.
 
@@ -79,7 +109,13 @@ RULES:
 - Conversational tone
 - NO hashtags
 - Target: under 300 characters
-- Output valid JSON: {"title": "", "body": "...", "hashtags": []}""",
+- You MUST output ONLY a valid JSON object with these EXACT fields (no extra text, no markdown):
+  * hook: string (direct opening)
+  * body: string (main message)
+  * hashtags: empty array
+
+Example format:
+{"hook": "...", "body": "...", "hashtags": []}""",
 }
 
 # Platform-specific max tokens for the API call
@@ -211,10 +247,33 @@ def _safe_json_parse(raw: str) -> dict[str, Any]:
         if isinstance(body, str) and body.strip().startswith("{"):
             try:
                 inner = json.loads(body)
-                if "body" in inner and "title" in inner:
+                if "body" in inner and ("title" in inner or "hook" in inner):
+                    # Merge inner JSON into result, preserving outer fields if not in inner
                     result = {**result, **inner}
             except json.JSONDecodeError:
                 pass
+        
+        # CRITICAL FIX: If body contains the entire JSON structure as a string,
+        # parse it and use the parsed fields directly
+        if isinstance(body, str) and ('"hook"' in body or '"discussion_question"' in body or '"engagement_question"' in body):
+            try:
+                # Extract the JSON object from body string
+                body_start = body.find("{")
+                body_end = body.rfind("}")
+                if body_start != -1 and body_end != -1:
+                    parsed_body = json.loads(body[body_start:body_end + 1])
+                    # Use parsed fields if they exist
+                    result["hook"] = parsed_body.get("hook", result.get("hook", ""))
+                    result["body"] = parsed_body.get("body", body)
+                    result["discussion_question"] = parsed_body.get("discussion_question", result.get("discussion_question", ""))
+                    result["engagement_question"] = parsed_body.get("engagement_question", result.get("engagement_question", ""))
+                    result["question"] = parsed_body.get("question", result.get("question", ""))
+                    result["cta"] = parsed_body.get("cta", result.get("cta", ""))
+                    result["hashtags"] = parsed_body.get("hashtags", result.get("hashtags", []))
+                    result["title"] = parsed_body.get("title", result.get("title", ""))
+            except json.JSONDecodeError:
+                pass  # Keep body as-is if parsing fails
+        
         return result
     except json.JSONDecodeError:
         logger.warning(f"JSON parse failed even after sanitization, raw: {raw[:200]}")
@@ -225,7 +284,7 @@ def _safe_json_parse(raw: str) -> dict[str, Any]:
             if body_match:
                 body = body_match.group(1)
                 break
-        return {"body": body, "hashtags": [], "title": ""}
+        return {"body": body, "hashtags": [], "title": "", "hook": ""}
 
 
 def _strip_emojis(text: str) -> str:
@@ -429,7 +488,7 @@ async def _generate_single_content(
         prompt_parts.append(f"\nAVOID THESE PATTERNS (they performed poorly): {'; '.join(rejected_patterns[:2])}")
 
     enriched_prompt = "\n".join(prompt_parts)
-    enriched_prompt += '\n\nGenerate ONLY valid JSON: {"title": "...", "body": "...", "hashtags": [...], "mentions": [...]}'
+    enriched_prompt += '\n\nGenerate ONLY valid JSON with these fields: {"hook": "...", "body": "...", "discussion_question": "...", "cta": "...", "hashtags": [...]}'
 
     # ── Step 3: Call OpenAI with platform-specific parameters ──
     system_prompt = PLATFORM_SYSTEM_PROMPTS.get(platform, PLATFORM_SYSTEM_PROMPTS[Platform.LINKEDIN])
@@ -455,7 +514,9 @@ async def _generate_single_content(
         )
 
         content = response.choices[0].message.content
+        logger.info(f"Raw LLM response for {platform.value}: {content[:200]}...")  # Debug log
         result = _safe_json_parse(content or "{}")
+        logger.info(f"Parsed result keys: {list(result.keys())}")  # Debug log
 
         body = result.get("body", "")
         hashtags = result.get("hashtags", [])
@@ -465,7 +526,12 @@ async def _generate_single_content(
 
         return {
             "title": result.get("title", ""),
+            "hook": result.get("hook", ""),
             "body": body,
+            "discussion_question": result.get("discussion_question", ""),
+            "engagement_question": result.get("engagement_question", ""),
+            "question": result.get("question", ""),
+            "cta": result.get("cta", ""),
             "hashtags": hashtags,
             "mentions": result.get("mentions", []),
             "model_used": model,
@@ -517,7 +583,12 @@ async def _generate_with_groq(
 
     return {
         "title": result.get("title", ""),
+        "hook": result.get("hook", ""),
         "body": body,
+        "discussion_question": result.get("discussion_question", ""),
+        "engagement_question": result.get("engagement_question", ""),
+        "question": result.get("question", ""),
+        "cta": result.get("cta", ""),
         "hashtags": hashtags,
         "mentions": result.get("mentions", []),
         "model_used": model,

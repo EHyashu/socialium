@@ -13,6 +13,7 @@ from app.core.logging_setup import setup_logging
 from app.core.qdrant_client import create_all_collections
 from app.core.sentry_setup import setup_sentry
 from app.middleware.request_id import RequestIDMiddleware
+from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.routers import (
     ab_testing,
     analytics,
@@ -24,6 +25,7 @@ from app.routers import (
     notifications,
     oauth,
     platforms,
+    publish_management,
     scheduling,
     trends,
     whatsapp_webhook,
@@ -134,6 +136,9 @@ app.add_middleware(
 # Request ID middleware (must be added AFTER CORS)
 app.add_middleware(RequestIDMiddleware)
 
+# Rate limiting middleware (applied after CORS and Request ID)
+app.add_middleware(RateLimiterMiddleware)
+
 # Exception handlers
 register_exception_handlers(app)
 
@@ -154,6 +159,8 @@ app.include_router(ab_testing.router, prefix=f"{api_prefix}/ab-testing", tags=["
 app.include_router(auto_reply.router, prefix=f"{api_prefix}/auto-reply", tags=["Auto Reply"])
 app.include_router(whatsapp_webhook.router, prefix=f"{api_prefix}/whatsapp", tags=["WhatsApp"])
 app.include_router(twilio_webhook.router, prefix=f"{api_prefix}/twilio", tags=["Twilio"])
+app.include_router(platform_webhooks.router, prefix=f"{api_prefix}/webhooks", tags=["Platform Webhooks"])
+app.include_router(publish_management.router, prefix=f"{api_prefix}/publish", tags=["Publish Management"])
 app.include_router(platform_webhooks.router, prefix=f"{api_prefix}/platforms", tags=["Platform Webhooks"])
 
 
