@@ -3,6 +3,8 @@
 import logging
 from datetime import datetime, timedelta
 
+from openai import AsyncOpenAI
+
 from app.config import get_settings
 from app.core.langfuse_setup import get_openai_client, observe
 
@@ -72,6 +74,33 @@ User comment: "{comment_text}"
 
 Write a brief, friendly, and appropriate reply. Just the reply text, nothing else."""
 
+    # Try Groq first (free tier, no quota issues)
+    try:
+        client = AsyncOpenAI(
+            api_key=settings.groq_api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+        response = await client.chat.completions.create(
+            model=settings.groq_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=150,
+            temperature=0.7,
+        )
+        reply = response.choices[0].message.content.strip()
+        
+        # Ensure reply is under 280 chars
+        if len(reply) > 280:
+            reply = reply[:277] + "..."
+        
+        logger.info(f"Generated auto-reply with Groq ({len(reply)} chars) for {platform}")
+        return reply
+    except Exception as e:
+        logger.warning(f"Groq failed, trying OpenAI: {e}")
+    
+    # Fallback to OpenAI
     try:
         client = get_openai_client()
         response = await client.chat.completions.create(
@@ -89,10 +118,10 @@ Write a brief, friendly, and appropriate reply. Just the reply text, nothing els
         if len(reply) > 280:
             reply = reply[:277] + "..."
         
-        logger.info(f"Generated auto-reply ({len(reply)} chars) for {platform}")
+        logger.info(f"Generated auto-reply with OpenAI ({len(reply)} chars) for {platform}")
         return reply
     except Exception as e:
-        logger.error(f"Auto-reply generation failed: {e}")
+        logger.error(f"All LLMs failed, using template fallback: {e}")
         # Fallback to simple replies based on sentiment
         if any(word in comment_text.lower() for word in ["love", "great", "awesome", "amazing"]):
             return "Thank you so much! We really appreciate your support! 🙏✨"

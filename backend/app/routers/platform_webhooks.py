@@ -77,19 +77,27 @@ async def linkedin_webhook(request: Request, db: AsyncSession = Depends(get_db))
                                 access_token = account.access_token  # Would decrypt here
                                 
                                 # Post comment reply via LinkedIn API
-                                url = "https://api.linkedin.com/v2/comments"
+                                # Extract numeric ID if post_id is a full URN
+                                numeric_id = post_id.replace("urn:li:share:", "") if "urn:li:share:" in post_id else post_id
+                                
+                                # URL-encode the URN for the path
+                                import urllib.parse
+                                share_urn = urllib.parse.quote(f"urn:li:share:{numeric_id}", safe="")
+                                url = f"https://api.linkedin.com/v2/socialActions/{share_urn}/comments"
+                                
                                 payload = {
                                     "actor": f"urn:li:person:{account.platform_user_id}",
-                                    "object": f"urn:li:share:{post_id}",
-                                    "parentComment": comment_id if comment_id else f"urn:li:comment:{content_id}",
                                     "message": {"text": reply}
                                 }
                                 
                                 headers = {
                                     "Authorization": f"Bearer {access_token}",
                                     "Content-Type": "application/json",
-                                    "X-Restli-Protocol-Version": "2.0.0"
+                                    "X-Restli-Protocol-Version": "2.0.0",
+                                    "LinkedIn-Version": "202411"
                                 }
+                                
+                                logger.info(f"Posting to LinkedIn URL: {url}")
                                 
                                 async with httpx.AsyncClient() as client:
                                     response = await client.post(url, json=payload, headers=headers)
