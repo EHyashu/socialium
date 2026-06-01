@@ -1,6 +1,7 @@
 """Auto-reply router."""
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.schemas.automation import AutoReplyConfig, AutoReplyResponse
 from app.services.auto_reply_service import should_auto_reply, generate_reply
@@ -9,6 +10,13 @@ router = APIRouter()
 
 # In-memory config store (use DB in production)
 _configs: dict[str, AutoReplyConfig] = {}
+
+
+class AutoReplyTestRequest(BaseModel):
+    """Request model for testing auto-reply."""
+    comment_text: str
+    platform: str
+    tone: str = "professional"
 
 
 @router.post("/config", response_model=AutoReplyResponse)
@@ -27,11 +35,11 @@ async def set_auto_reply_config(config: AutoReplyConfig):
 
 
 @router.post("/test")
-async def test_auto_reply(comment_text: str, platform: str, tone: str = "professional"):
+async def test_auto_reply(request: AutoReplyTestRequest):
     """Test auto-reply generation."""
-    should_reply = await should_auto_reply(platform, comment_text)
+    should_reply = await should_auto_reply(request.platform, request.comment_text)
     if not should_reply:
         return {"should_reply": False, "reply": None}
 
-    reply = await generate_reply(comment_text, platform, tone)
+    reply = await generate_reply(request.comment_text, request.platform, request.tone)
     return {"should_reply": True, "reply": reply}
