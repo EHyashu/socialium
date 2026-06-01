@@ -2,12 +2,14 @@
 
 import logging
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.content import Content
+from app.models.platform_account import PlatformAccount
 from app.services.auto_reply_service import should_auto_reply, generate_reply
 
 logger = logging.getLogger(__name__)
@@ -32,12 +34,13 @@ async def linkedin_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 comment_text = event.get("text", "")
                 content_id = event.get("content_id")
                 commenter_id = event.get("author_id")
-                post_id = event.get("post_id")
+                post_id = event.get("post_id")  # LinkedIn post URN
+                comment_id = event.get("comment_id")  # Comment URN
                 
                 # Find the content in our database
                 content = await db.execute(
                     select(Content).where(
-                        Content.ai_model_used == post_id,
+                        Content.platform_post_id == post_id,
                         Content.platform == "linkedin"
                     )
                 )
@@ -58,9 +61,47 @@ async def linkedin_webhook(request: Request, db: AsyncSession = Depends(get_db))
                             tone="professional"
                         )
                         
-                        # TODO: Post reply to LinkedIn API
-                        # POST https://api.linkedin.com/v2/comments
-                        logger.info(f"Auto-reply to LinkedIn comment: {reply}")
+                        # Post reply to LinkedIn API
+                        try:
+                            # Get OAuth token for the content author
+                            account_result = await db.execute(
+                                select(PlatformAccount).where(
+                                    PlatformAccount.user_id == content_obj.author_id,
+                                    PlatformAccount.platform == "linkedin",
+                                    PlatformAccount.is_active == True
+                                )
+                            )
+                            account = account_result.scalars().first()
+                            
+                            if account:
+                                access_token = account.access_token  # Would decrypt here
+                                
+                                # Post comment reply via LinkedIn API
+                                url = "https://api.linkedin.com/v2/comments"
+                                payload = {
+                                    "actor": f"urn:li:person:{account.platform_user_id}",
+                                    "object": f"urn:li:share:{post_id}",
+                                    "parentComment": comment_id if comment_id else f"urn:li:comment:{content_id}",
+                                    "message": {"text": reply}
+                                }
+                                
+                                headers = {
+                                    "Authorization": f"Bearer {access_token}",
+                                    "Content-Type": "application/json",
+                                    "X-Restli-Protocol-Version": "2.0.0"
+                                }
+                                
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.post(url, json=payload, headers=headers)
+                                    
+                                    if response.status_code in (200, 201):
+                                        logger.info(f"✅ LinkedIn auto-reply posted successfully: {reply}")
+                                    else:
+                                        logger.error(f"❌ LinkedIn API error: {response.status_code} - {response.text}")
+                            else:
+                                logger.error(f"No LinkedIn account found for user {content_obj.author_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to post LinkedIn reply: {e}", exc_info=True)
                         
         return {"status": "received"}
         
@@ -94,7 +135,7 @@ async def twitter_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 # Find the original content
                 content = await db.execute(
                     select(Content).where(
-                        Content.ai_model_used == in_reply_to,
+                        Content.platform_post_id == in_reply_to,
                         Content.platform == "twitter"
                     )
                 )
@@ -115,9 +156,51 @@ async def twitter_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                             tone="casual"
                         )
                         
-                        # TODO: Post reply to Twitter API
-                        # POST https://api.twitter.com/2/tweets
-                        logger.info(f"Auto-reply to Twitter: {reply}")
+                        # Post reply to Twitter API
+                        try:
+                            # Get OAuth token
+                            account_result = await db.execute(
+                                select(PlatformAccount).where(
+                                    PlatformAccount.user_id == content_obj.author_id,
+                                    PlatformAccount.platform == "twitter",
+                                    PlatformAccount.is_active == True
+                                )
+                            )
+                            account = account_result.scalars().first()
+                            
+                            if account:
+                                access_token = account.access_token
+                                
+                                # Post reply tweet via Twitter API v2
+                                url = "https://api.twitter.com/2/tweets"
+                                
+                                # Ensure reply is under 280 chars
+                                if len(reply) > 280:
+                                    reply = reply[:277] + "..."
+                                
+                                payload = {
+                                    "text": reply,
+                                    "reply": {
+                                        "in_reply_to_tweet_id": tweet_id
+                                    }
+                                }
+                                
+                                headers = {
+                                    "Authorization": f"Bearer {access_token}",
+                                    "Content-Type": "application/json"
+                                }
+                                
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.post(url, json=payload, headers=headers)
+                                    
+                                    if response.status_code in (200, 201):
+                                        logger.info(f"✅ Twitter auto-reply posted successfully: {reply}")
+                                    else:
+                                        logger.error(f"❌ Twitter API error: {response.status_code} - {response.text}")
+                            else:
+                                logger.error(f"No Twitter account found for user {content_obj.author_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to post Twitter reply: {e}", exc_info=True)
             
             # Handle DMs
             if "message_create" in event:
@@ -132,8 +215,46 @@ async def twitter_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                         tone="professional"
                     )
                     
-                    # TODO: Send DM reply via Twitter API
-                    logger.info(f"Auto-reply to Twitter DM: {reply}")
+                    # Send DM reply via Twitter API
+                    try:
+                        account_result = await db.execute(
+                            select(PlatformAccount).where(
+                                PlatformAccount.user_id == content_obj.author_id if content_obj else None,
+                                PlatformAccount.platform == "twitter",
+                                PlatformAccount.is_active == True
+                            )
+                        )
+                        account = account_result.scalars().first()
+                        
+                        if account:
+                            access_token = account.access_token
+                            
+                            # Send DM via Twitter API
+                            url = "https://api.twitter.com/1.1/direct_messages/events/new.json"
+                            payload = {
+                                "event": {
+                                    "type": "message_create",
+                                    "message_create": {
+                                        "target": {"recipient_id": sender_id},
+                                        "message_data": {"text": reply}
+                                    }
+                                }
+                            }
+                            
+                            headers = {
+                                "Authorization": f"Bearer {access_token}",
+                                "Content-Type": "application/json"
+                            }
+                            
+                            async with httpx.AsyncClient() as client:
+                                response = await client.post(url, json=payload, headers=headers)
+                                
+                                if response.status_code in (200, 201):
+                                    logger.info(f"✅ Twitter DM reply sent successfully: {reply}")
+                                else:
+                                    logger.error(f"❌ Twitter DM API error: {response.status_code} - {response.text}")
+                    except Exception as e:
+                        logger.error(f"Failed to send Twitter DM reply: {e}", exc_info=True)
                         
         return {"status": "received"}
         
@@ -163,11 +284,12 @@ async def instagram_webhook(request: Request, db: AsyncSession = Depends(get_db)
                     comment_text = comment_data.get("message", "")
                     post_id = comment_data.get("media_id")
                     commenter_id = comment_data.get("from", {}).get("id")
+                    comment_id = comment_data.get("id")
                     
                     # Find the content
                     content = await db.execute(
                         select(Content).where(
-                            Content.ai_model_used == post_id,
+                            Content.platform_post_id == post_id,
                             Content.platform == "instagram"
                         )
                     )
@@ -188,14 +310,44 @@ async def instagram_webhook(request: Request, db: AsyncSession = Depends(get_db)
                                 tone="friendly"
                             )
                             
-                            # TODO: Post reply to Instagram Graph API
-                            # POST https://graph.facebook.com/v18.0/{comment-id}/replies
-                            logger.info(f"Auto-reply to Instagram comment: {reply}")
+                            # Post reply to Instagram Graph API
+                            try:
+                                account_result = await db.execute(
+                                    select(PlatformAccount).where(
+                                        PlatformAccount.user_id == content_obj.author_id,
+                                        PlatformAccount.platform == "instagram",
+                                        PlatformAccount.is_active == True
+                                    )
+                                )
+                                account = account_result.scalars().first()
+                                
+                                if account:
+                                    access_token = account.access_token
+                                    
+                                    # Post reply to comment via Instagram Graph API
+                                    url = f"https://graph.facebook.com/v18.0/{comment_id}/replies"
+                                    payload = {
+                                        "message": reply,
+                                        "access_token": access_token
+                                    }
+                                    
+                                    async with httpx.AsyncClient() as client:
+                                        response = await client.post(url, json=payload)
+                                        
+                                        if response.status_code in (200, 201):
+                                            logger.info(f"✅ Instagram auto-reply posted successfully: {reply}")
+                                        else:
+                                            logger.error(f"❌ Instagram API error: {response.status_code} - {response.text}")
+                                else:
+                                    logger.error(f"No Instagram account found for user {content_obj.author_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to post Instagram reply: {e}", exc_info=True)
                 
                 elif change.get("field") == "messages":
                     # Handle Instagram DMs
                     message_data = change.get("value", {})
                     message_text = message_data.get("body", "")
+                    sender_id = message_data.get("id")
                     
                     if message_text:
                         # Generate DM reply
@@ -205,8 +357,37 @@ async def instagram_webhook(request: Request, db: AsyncSession = Depends(get_db)
                             tone="professional"
                         )
                         
-                        # TODO: Send reply via Instagram Graph API
-                        logger.info(f"Auto-reply to Instagram DM: {reply}")
+                        # Send reply via Instagram Graph API (Messenger)
+                        try:
+                            account_result = await db.execute(
+                                select(PlatformAccount).where(
+                                    PlatformAccount.user_id == content_obj.author_id if content_obj else None,
+                                    PlatformAccount.platform == "instagram",
+                                    PlatformAccount.is_active == True
+                                )
+                            )
+                            account = account_result.scalars().first()
+                            
+                            if account:
+                                access_token = account.access_token
+                                
+                                # Send DM reply via Facebook Graph API (Instagram messaging)
+                                url = f"https://graph.facebook.com/v18.0/me/messages"
+                                payload = {
+                                    "recipient": {"id": sender_id},
+                                    "message": {"text": reply},
+                                    "access_token": access_token
+                                }
+                                
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.post(url, json=payload)
+                                    
+                                    if response.status_code in (200, 201):
+                                        logger.info(f"✅ Instagram DM reply sent successfully: {reply}")
+                                    else:
+                                        logger.error(f"❌ Instagram DM API error: {response.status_code} - {response.text}")
+                        except Exception as e:
+                            logger.error(f"Failed to send Instagram DM reply: {e}", exc_info=True)
                         
         return {"status": "received"}
         
