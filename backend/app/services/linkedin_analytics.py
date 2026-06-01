@@ -37,10 +37,14 @@ async def fetch_linkedin_post_analytics(
     post_urn = content.platform_post_id
     
     try:
+        import urllib.parse
+        # URL-encode the URN for the path (colons must be encoded)
+        encoded_urn = urllib.parse.quote(post_urn, safe="")
+        
         async with httpx.AsyncClient() as client:
             # Get post analytics (likes, comments, shares)
             response = await client.get(
-                f"https://api.linkedin.com/v2/socialActions/{post_urn}",
+                f"https://api.linkedin.com/v2/socialActions/{encoded_urn}",
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "X-Restli-Protocol-Version": "2.0.0",
