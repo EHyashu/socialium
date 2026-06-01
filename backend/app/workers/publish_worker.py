@@ -60,7 +60,7 @@ async def publish_scheduled_content() -> None:
                         content.publish_failure_reason = None  # Clear any previous failure
                         content.publish_retry_count = 0
                         # Store platform post ID for analytics tracking
-                        content.ai_model_used = publish_result.get("platform_post_id", "")
+                        content.platform_post_id = publish_result.get("platform_post_id", "")
                         await db.commit()
                         logger.info(f"✅ Published content {content.id} to {content.platform.value}: {publish_result.get('platform_url')}")
                     else:

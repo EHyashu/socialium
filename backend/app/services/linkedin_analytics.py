@@ -22,10 +22,10 @@ async def fetch_linkedin_post_analytics(
     
     Requires:
     - LinkedIn access token
-    - LinkedIn post URN (stored after publishing)
+    - LinkedIn post URN (stored in platform_post_id after publishing)
     """
-    if not content.platform_user_id:
-        logger.warning(f"Content {content.id} has no LinkedIn post URN")
+    if not content.platform_post_id:
+        logger.warning(f"Content {content.id} has no LinkedIn post URN (platform_post_id is None)")
         return None
     
     access_token = platform_account.access_token
@@ -34,7 +34,7 @@ async def fetch_linkedin_post_analytics(
         return None
     
     # LinkedIn post URN format: urn:li:share:1234567890
-    post_urn = content.platform_user_id
+    post_urn = content.platform_post_id
     
     try:
         async with httpx.AsyncClient() as client:
@@ -92,7 +92,7 @@ async def sync_linkedin_analytics(
             Content.workspace_id == workspace_id,
             Content.platform == "linkedin",
             Content.status == "published",
-            Content.platform_user_id.isnot(None),  # Has LinkedIn post URN
+            Content.platform_post_id.isnot(None),  # Has LinkedIn post URN
         )
     )
     contents = result.scalars().all()
@@ -126,8 +126,8 @@ async def sync_linkedin_analytics(
             # Update content with real analytics
             content.like_count = analytics["likes"]
             content.comment_count = analytics["comments"]
+            content.engagement_count = analytics["likes"] + analytics["comments"]
             # Note: LinkedIn doesn't easily expose share count
-            content.last_synced_at = datetime.utcnow()
             synced_count += 1
     
     await db.commit()
