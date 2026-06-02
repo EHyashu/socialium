@@ -46,8 +46,21 @@ async def linkedin_authorize(user_id: str = Query(None)):
 
 
 @router.get("/linkedin/callback")
-async def linkedin_callback_get(code: str, state: str = "", db: AsyncSession = Depends(get_db)):
+async def linkedin_callback_get(
+    code: str = None, 
+    error: str = None,
+    error_description: str = None,
+    state: str = "", 
+    db: AsyncSession = Depends(get_db)
+):
     """LinkedIn OAuth callback (GET)."""
+    # Handle OAuth errors from LinkedIn
+    if error:
+        logger.error(f"LinkedIn OAuth error: {error} - {error_description}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"LinkedIn OAuth error: {error} - {error_description}"
+        )
     return await process_linkedin_callback(code, state, is_post=False, db=db)
 
 
