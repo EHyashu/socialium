@@ -19,7 +19,7 @@ def get_linkedin_auth_url(state: str) -> str:
         "response_type": "code",
         "client_id": settings.linkedin_client_id,
         "redirect_uri": settings.linkedin_redirect_uri,
-        "scope": "openid profile w_member_social email",
+        "scope": "openid profile email w_member_social r_liteprofile r_emailaddress r_basicprofile r_organization_social",  # Full permissions for posting AND analytics
         "state": state,
     }
     url = f"https://www.linkedin.com/oauth/v2/authorization?{urllib.parse.urlencode(params)}"

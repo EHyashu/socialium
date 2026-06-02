@@ -41,33 +41,58 @@ async def fetch_linkedin_post_analytics(
         # URL-encode the URN for the path (colons must be encoded)
         encoded_urn = urllib.parse.quote(post_urn, safe="")
         
-        async with httpx.AsyncClient() as client:
-            # Get post analytics (likes, comments, shares)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # LinkedIn's socialActions endpoint requires specific permissions
+            # Try fetching likes and comments separately as fallback
+            likes = 0
+            comments = 0
+            
+            # Method 1: Try socialActions endpoint
             response = await client.get(
                 f"https://api.linkedin.com/v2/socialActions/{encoded_urn}",
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "X-Restli-Protocol-Version": "2.0.0",
+                    "LinkedIn-Version": "202411",
                 },
             )
             
-            if response.status_code != 200:
-                logger.error(f"LinkedIn API error: {response.text}")
-                return None
-            
-            data = response.json()
-            
-            # Parse engagement counts
-            likes = 0
-            comments = 0
-            
-            # LinkedIn returns likes in "likes" array
-            if "likes" in data:
+            if response.status_code == 200:
+                data = response.json()
+                # Parse likes from total
                 likes = data.get("likes", {}).get("paging", {}).get("total", 0)
-            
-            # Comments in "comments" array  
-            if "comments" in data:
                 comments = data.get("comments", {}).get("paging", {}).get("total", 0)
+            else:
+                logger.warning(f"socialActions failed ({response.status_code}): {response.text}")
+                
+                # Method 2: Try fetching likes and comments separately
+                # Get likes
+                likes_resp = await client.get(
+                    f"https://api.linkedin.com/v2/socialActions/{encoded_urn}/likes",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202411",
+                    },
+                )
+                
+                if likes_resp.status_code == 200:
+                    likes_data = likes_resp.json()
+                    likes = likes_data.get("paging", {}).get("total", 0)
+                
+                # Get comments
+                comments_resp = await client.get(
+                    f"https://api.linkedin.com/v2/socialActions/{encoded_urn}/comments",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202411",
+                    },
+                )
+                
+                if comments_resp.status_code == 200:
+                    comments_data = comments_resp.json()
+                    comments = comments_data.get("paging", {}).get("total", 0)
             
             return {
                 "likes": likes,
