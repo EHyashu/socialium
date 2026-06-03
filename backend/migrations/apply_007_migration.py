@@ -19,12 +19,15 @@ async def apply_migration():
     
     async with engine.begin() as conn:
         try:
-            # SQLite doesn't support ALTER TABLE ADD COLUMN IF NOT EXISTS
-            # We need to check if columns exist first
-            
-            # Check if columns already exist
-            result = await conn.execute(text("PRAGMA table_info(contents)"))
-            columns = [row[1] for row in result.fetchall()]
+            # Check if columns already exist (dialect-aware)
+            if conn.dialect.name == "postgresql":
+                result = await conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'contents';"
+                ))
+                columns = [row[0] for row in result.fetchall()]
+            else:
+                result = await conn.execute(text("PRAGMA table_info(contents)"))
+                columns = [row[1] for row in result.fetchall()]
             
             columns_to_add = [
                 "publish_failure_reason",
@@ -47,8 +50,9 @@ async def apply_migration():
                             "ALTER TABLE contents ADD COLUMN publish_retry_count INTEGER DEFAULT 0"
                         ))
                     elif column in ["publish_last_retry_at", "publish_next_retry_at"]:
+                        db_type = "TIMESTAMP WITH TIME ZONE" if conn.dialect.name == "postgresql" else "TIMESTAMP"
                         await conn.execute(text(
-                            f"ALTER TABLE contents ADD COLUMN {column} TIMESTAMP"
+                            f"ALTER TABLE contents ADD COLUMN {column} {db_type}"
                         ))
                     print(f"  ✅ Column '{column}' added")
             
