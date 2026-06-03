@@ -76,6 +76,7 @@ services:
       - POSTHOG_API_KEY=${POSTHOG_API_KEY}
       - POSTHOG_HOST=${POSTHOG_HOST}
       - POSTHOG_PROJECT_ID=${POSTHOG_PROJECT_ID}
+      - SENTRY_DSN=${SENTRY_DSN}
     volumes:
       - ./backend:/app
       - /app/venv  # Don't mount venv from host
