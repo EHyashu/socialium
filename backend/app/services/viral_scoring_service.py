@@ -430,16 +430,32 @@ class ViralScoringService:
             logger.warning(f"Trend alignment scoring failed: {e}")
             return 10  # Neutral score on failure
 
+    async def _generate_embedding(self, text: str) -> list[float]:
+        """Generate content embedding using OpenAI's text-embedding-3-large model."""
+        if not text.strip():
+            return [0.0] * 3072
+        try:
+            client = get_openai_client()
+            response = await client.embeddings.create(
+                model=settings.openai_embedding_model,
+                input=text,
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.warning(f"Failed to generate embedding: {e}. Falling back to zero vector.")
+            return [0.0] * 3072
+
     # ── Factor 4: Historical Performance Pattern ───────────────────────────────
 
     async def _score_historical_pattern(self, workspace_id: str, content: str) -> int:
         """Score based on similarity to previously successful content (0-20)."""
         try:
             # Search for similar successful posts in Qdrant
-            # Using placeholder vector (real implementation would embed content first)
+            # Using real content embedding
+            query_vector = await self._generate_embedding(content)
             results = qdrant_search(
                 collection_name="successful_content",
-                query_vector=[0.0] * 3072,  # TODO: use real content embedding
+                query_vector=query_vector,
                 limit=5,
                 score_threshold=0.5,
             )
@@ -462,9 +478,10 @@ class ViralScoringService:
         """Score based on how different this is from recent drafts (0-10)."""
         try:
             # Search recent drafts for similarity
+            query_vector = await self._generate_embedding(content)
             results = qdrant_search(
                 collection_name="content_drafts",
-                query_vector=[0.0] * 3072,  # TODO: use real content embedding
+                query_vector=query_vector,
                 limit=3,
                 score_threshold=0.5,
             )
