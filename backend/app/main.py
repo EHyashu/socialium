@@ -127,7 +127,7 @@ app.add_middleware(
         "http://localhost:3003",
         "http://127.0.0.1:3000",
     ],
-    allow_origin_regex="http://localhost:\d+|http://127\.0\.0\.1:\d+|http://\d+\.\d+\.\d+\.\d+:\d+" if settings.debug else None,
+    allow_origin_regex=r"https?://localhost:\d+|https?://127\.0\.0\.1:\d+" if settings.debug else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
